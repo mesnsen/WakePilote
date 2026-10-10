@@ -33,11 +33,11 @@ jobs:
       - name: Versioned APK
         run: |
           mkdir -p artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk artifacts/WakePilote-0.1.0-debug.apk
-          sha256sum artifacts/WakePilote-0.1.0-debug.apk > artifacts/SHA256SUMS.txt
+          cp app/build/outputs/apk/debug/app-debug.apk artifacts/WakePilote-0.1.1-debug.apk
+          sha256sum artifacts/WakePilote-0.1.1-debug.apk > artifacts/SHA256SUMS.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: WakePilote-0.1.0-debug
+          name: WakePilote-0.1.1-debug
           path: artifacts/
           if-no-files-found: error
           retention-days: 30

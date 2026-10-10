@@ -17,6 +17,7 @@ import io.github.mesnsen.wakepilote.core.*
 import io.github.mesnsen.wakepilote.data.SettingsRepository
 import io.github.mesnsen.wakepilote.vision.FaceCamera
 import io.github.mesnsen.wakepilote.vision.VisionMetrics
+import io.github.mesnsen.wakepilote.vision.FaceLandmarks
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -47,6 +48,9 @@ class MonitoringService:LifecycleService() {
             val ui=SessionHub.state.value
             val now=SystemClock.elapsedRealtime()
             if(ui.running) apply(engine.tick(now))
+            if(ui.landmarks!=null && now-ui.landmarks.atMs>500) {
+                SessionHub.mutable.update { it.copy(landmarks=null) }
+            }
             if(ui.preparing && ui.lastObservationMs>0 && now-ui.lastObservationMs>1500) {
                 SessionHub.mutable.update { it.copy(quality=Quality.STALE) }
             }
@@ -109,18 +113,19 @@ class MonitoringService:LifecycleService() {
             if(monitoring) { engine.start(SystemClock.elapsedRealtime()); repository.markSession(true) }
             if(session!=token) return@launch
             camera=FaceCamera(this@MonitoringService,this@MonitoringService,
-                { observation,metrics -> if(session==token) process(observation,metrics) },
-                { message -> if(session==token) {
-                    SessionHub.mutable.update { it.copy(error=message,quality=Quality.CAMERA_ERROR) }
-                    if(SessionHub.state.value.running) apply(engine.unavailable(SystemClock.elapsedRealtime(),Quality.CAMERA_ERROR))
+                { observation,metrics,landmarks -> if(session==token) process(observation,metrics,landmarks) },
+                { failure -> if(session==token) {
+                    SessionHub.mutable.update { it.copy(error=failure.message,quality=failure.quality,landmarks=null,visionDiagnostic=failure.diagnostic) }
+                    if(SessionHub.state.value.running) apply(engine.unavailable(SystemClock.elapsedRealtime(),failure.quality))
                 } }).also { it.setSurface(requestedSurface); it.start() }
             handler.removeCallbacks(tick); handler.post(tick)
         }
     }
-    private fun process(o:Observation,metrics:VisionMetrics) {
+    private fun process(o:Observation,metrics:VisionMetrics,landmarks:FaceLandmarks?) {
         val now=SystemClock.elapsedRealtime()
         if(now-o.atMs>500) return // never publish a frozen pipeline as fresh
-        SessionHub.mutable.update { it.copy(lastObservationMs=o.atMs,quality=o.quality,metrics=metrics,error=null) }
+        SessionHub.mutable.update { it.copy(lastObservationMs=o.atMs,quality=o.quality,metrics=metrics,error=null,
+            landmarks=landmarks,visionDiagnostic=null) }
         if(SessionHub.state.value.running) apply(engine.observe(o,now))
         else calibration?.let { c ->
             val result=c.add(o)
@@ -200,7 +205,7 @@ class MonitoringService:LifecycleService() {
         ++session; handler.removeCallbacksAndMessages(null); camera?.close(); camera=null
         player.close(); scope.cancel()
         if(Build.VERSION.SDK_INT>=29) thermalListener?.let { getSystemService(PowerManager::class.java).removeThermalStatusListener(it) }
-        SessionHub.mutable.update { it.copy(running=false,preparing=false,snapshot=Snapshot(),calibrationProgress=null) }
+        SessionHub.mutable.update { it.copy(running=false,preparing=false,snapshot=Snapshot(),calibrationProgress=null,landmarks=null) }
         super.onDestroy()
     }
     companion object {

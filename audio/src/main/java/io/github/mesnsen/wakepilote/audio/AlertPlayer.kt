@@ -11,7 +11,7 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 data class AudioStatus(val playing:Boolean=false, val route:String="Sortie à tester", val detail:String="",
-    val routeObserved:Boolean=false, val interrupted:Boolean=false, val mediaVolume:Int=0)
+    val routeObserved:Boolean=false, val interrupted:Boolean=false, val mediaVolume:Int=0,val diagnostic:String?=null)
 data class OutputDevice(val id:Int,val label:String)
 
 /** Main-thread confined. A preference is never reported as an observed route. */
@@ -102,8 +102,10 @@ class AlertPlayer(context:Context) : AutoCloseable {
                 .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(24000).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
                 .setTransferMode(AudioTrack.MODE_STATIC).setBufferSizeInBytes(pcm.size*2).build()
             track=player
-            check(player.state==AudioTrack.STATE_INITIALIZED) { "Lecteur non initialisé" }
+            // MODE_STATIC starts in STATE_NO_STATIC_DATA until the first successful write.
+            check(player.state!=AudioTrack.STATE_UNINITIALIZED) { "Lecteur non initialisé" }
             check(player.write(pcm,0,pcm.size)==pcm.size) { "Tampon audio incomplet" }
+            check(player.state==AudioTrack.STATE_INITIALIZED) { "Tampon audio non initialisé" }
             val preferred=when(settings.output) {
                 OutputPreference.AUTO -> null
                 OutputPreference.PHONE -> phone()
@@ -127,7 +129,8 @@ class AlertPlayer(context:Context) : AutoCloseable {
         }.onFailure {
             stopOutput()
             if(urgentWanted) vibrate(true)
-            mutable.value=AudioStatus(detail="Impossible de jouer le son (${it.javaClass.simpleName})",interrupted=true,mediaVolume=volume())
+            mutable.value=AudioStatus(detail="Impossible de jouer le son — relancez le test à l'arrêt",interrupted=true,mediaVolume=volume(),
+                diagnostic="${it.javaClass.simpleName}: ${it.message.orEmpty().take(180)}")
         }
     }
     private fun updateRoute(detail:String?=null) {

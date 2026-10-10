@@ -2,13 +2,13 @@
 
 Projet d'application Android de détection de signes de somnolence, avec analyse du visage sur le téléphone et alertes sonores locales.
 
-**Version 0.1.0 — prototype Android expérimental, développement autorisé le 10 octobre 2026.**
+**Version 0.1.1 — prototype Android expérimental.** Correctifs de l'analyse et du son, avec points du visage visibles dans l'aperçu : [détail](docs/11_CORRECTIFS_0.1.1.md).
 
 Le dépôt contient maintenant une application native Kotlin/Compose qui embarque le modèle MediaPipe lors de la compilation, un moteur de règles indépendant d'Android, les tests et GitHub Actions. Les documents de conception ci-dessous restent le plan de référence historique. Le [bilan d'implémentation](docs/09_IMPLEMENTATION.md) décrit la version réelle et ses limites ; ne pas confondre une fonctionnalité codée avec une validation sur téléphone ou véhicule.
 
 ## Fonctions du prototype
 
-- Caméra frontale avec aperçu optionnel, contrôle du cadrage, de la lumière et de la fraîcheur.
+- Caméra frontale avec aperçu optionnel, points du visage, contrôle du cadrage, de la lumière et de la fraîcheur.
 - Fermeture prolongée des deux yeux, clignements, PERCLOS **estimé**, indices secondaires de bouche et de tête.
 - Avertissement précoce et alerte urgente, arrêt manuel immédiat demandé au lecteur, arrêt automatique après réouverture stable, reprise possible après acquittement.
 - Trois préférences audio, observation du routage pendant lecture, test sonore avant départ et vibration.
@@ -28,9 +28,9 @@ python3 scripts/verify_apk.py app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:connectedDebugAndroidTest
 ```
 
-La dernière commande nécessite un appareil ou un émulateur. Elle vérifie le chargement natif du modèle sur une image synthétique, les permissions, la suppression de la télémétrie et le premier parcours ; elle ne mesure pas les performances sur un visage réel. Une [modification documentée de MediaPipe](third_party/NOTICES.md) retire la collecte de métriques du SDK amont ; son hash et sa structure sont contrôlés à chaque compilation.
+La dernière commande nécessite un appareil ou un émulateur. Elle vérifie le chargement natif du modèle, l'analyse d'un résultat facial synthétique, la lecture sonore, les coordonnées des points, les permissions, la suppression de la télémétrie et le premier parcours ; elle ne mesure pas les performances sur un visage réel. Une [modification documentée de MediaPipe](third_party/NOTICES.md) retire la collecte de métriques du SDK amont ; son hash et sa structure sont contrôlés à chaque compilation.
 
-L'APK se trouve dans `app/build/outputs/apk/debug/app-debug.apk`. Le workflow [Android](.github/workflows/android.yml) publie l'artefact `WakePilote-0.1.0-debug` et les rapports. Un APK debug est signé pour les essais ; les signatures locales et CI peuvent différer. Si Android refuse une mise à jour pour incompatibilité de signature, il faut désinstaller la précédente version de test, ce qui efface ses réglages. Aucune signature de production n'est créée ou conservée dans ce dépôt.
+L'APK se trouve dans `app/build/outputs/apk/debug/app-debug.apk`. Le workflow [Android](.github/workflows/android.yml) publie l'artefact `WakePilote-0.1.1-debug` et les rapports. Un APK debug est signé pour les essais ; les signatures locales et CI peuvent différer. Si Android refuse une mise à jour pour incompatibilité de signature, il faut désinstaller la précédente version de test, ce qui efface ses réglages. Aucune signature de production n'est créée ou conservée dans ce dépôt.
 
 ## Premier essai
 

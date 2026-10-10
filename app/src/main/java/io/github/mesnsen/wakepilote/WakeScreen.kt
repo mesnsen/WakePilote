@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -21,6 +22,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.mesnsen.wakepilote.core.*
+import io.github.mesnsen.wakepilote.audio.AudioStatus
+import io.github.mesnsen.wakepilote.vision.FaceOverlayGeometry
 
 private val Navy=Color(0xFF0D1822)
 private val Panel=Color(0xFF182733)
@@ -86,8 +89,15 @@ fun WakeScreen(vm:WakeViewModel,service:MonitoringService?,onPrepare:()->Unit,on
                             }
                         }
                     } else {
-                        Text(if(session.running) "Le suivi est en cours." else "Avant de prendre\nla route.",fontSize=34.sp,fontWeight=FontWeight.SemiBold,lineHeight=40.sp)
-                        Text(if(session.running) "Restez attentif aux signes de fatigue et arrêtez-vous en sécurité."
+                        val unavailable=session.running && (session.error!=null || session.snapshot.state==MonitorState.MONITORING_UNAVAILABLE)
+                        Text(when {
+                            unavailable -> "Le suivi est indisponible."
+                            session.running && session.snapshot.state==MonitorState.INITIALIZING -> "Le suivi se prépare."
+                            session.running -> "Le suivi est en cours."
+                            else -> "Avant de prendre\nla route."
+                        },fontSize=34.sp,fontWeight=FontWeight.SemiBold,lineHeight=40.sp)
+                        Text(if(unavailable) "Aucun suivi fiable du visage pour le moment. Vérifiez le cadrage à l'arrêt."
+                            else if(session.running) "Restez attentif aux signes de fatigue et arrêtez-vous en sécurité."
                             else "Installez votre téléphone à l'arrêt, vérifiez le cadrage et testez votre alerte.",color=Muted,fontSize=16.sp,lineHeight=23.sp)
                     }
                     if(session.snapshot.pauseRecommended) Note("Alertes répétées. Une pause est fortement recommandée.",Amber)
@@ -97,7 +107,7 @@ fun WakeScreen(vm:WakeViewModel,service:MonitoringService?,onPrepare:()->Unit,on
                     StatusCard("01",if(session.running) "ANALYSE DU VISAGE" else "CADRAGE DU VISAGE",
                         if(session.running || session.preparing) qualityLabel(session.quality) else "Positionnez votre téléphone",
                         if(session.running) session.snapshot.reason else "Surveillance arrêtée",session.quality!=Quality.GOOD)
-                    if((session.preparing || session.running) && preview) CameraPreview(service)
+                    if((session.preparing || session.running) && preview) CameraPreview(service,session)
                     if(session.running || session.preparing) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                         Text("Aperçu caméra",Modifier.weight(1f),color=Muted)
                         Switch(checked=preview,onCheckedChange={preview=it;if(!it) service?.setPreviewSurface(null)})
@@ -129,7 +139,7 @@ fun WakeScreen(vm:WakeViewModel,service:MonitoringService?,onPrepare:()->Unit,on
                     Text(stringResource(R.string.privacy),fontSize=12.sp,color=Muted)
                     Text(stringResource(R.string.limits),fontSize=12.sp,color=Muted,lineHeight=17.sp)
                     TextButton(onClick={diagnostic=!diagnostic}) { Text(if(diagnostic) "Masquer les diagnostics" else "Diagnostics du prototype",fontSize=12.sp) }
-                    if(diagnostic) DiagnosticPanel(session)
+                    if(diagnostic) DiagnosticPanel(session,if(session.running) session.audio else testAudio)
                 }
                 Spacer(Modifier.height(12.dp))
             }
@@ -172,13 +182,32 @@ private fun Note(text:String,color:Color,onDismiss:(()->Unit)?=null) {
     }
 }
 @Composable
-private fun CameraPreview(service:MonitoringService?) {
+private fun CameraPreview(service:MonitoringService?,session:SessionUi) {
     val context=LocalContext.current
     val view=remember { PreviewView(context).apply { implementationMode=PreviewView.ImplementationMode.COMPATIBLE; scaleType=PreviewView.ScaleType.FIT_CENTER } }
     DisposableEffect(service,view) { service?.setPreviewSurface(view.surfaceProvider); onDispose { service?.setPreviewSurface(null) } }
     Box(Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp)).background(Color.Black)) {
         AndroidView(factory={view},modifier=Modifier.fillMaxSize(),update={service?.setPreviewSurface(it.surfaceProvider)})
-        Text("APERÇU LOCAL",Modifier.align(Alignment.BottomStart).padding(12.dp).background(Navy.copy(alpha=.8f)).padding(6.dp),color=Color.White,fontSize=10.sp)
+        Canvas(Modifier.fillMaxSize()) {
+            // CameraX supplies the real sensor crop, front-camera mirror, rotation and FIT_CENTER bars.
+            val transform=view.sensorToViewTransform ?: return@Canvas
+            val landmarks=session.landmarks ?: return@Canvas
+            if(android.os.SystemClock.elapsedRealtime()-landmarks.atMs>500) return@Canvas
+            val color=if(session.quality==Quality.GOOD) Mint else Amber
+            landmarks.faces.forEach { face ->
+                FaceOverlayGeometry.mapToPreview(face,transform).forEachIndexed { index,point ->
+                    if(point.x.isFinite() && point.y.isFinite() && point.x in 0f..size.width && point.y in 0f..size.height) {
+                        val radius=if(index in FaceDetailPoints) 2.dp.toPx() else 1.dp.toPx()
+                        val center=Offset(point.x,point.y)
+                        drawCircle(Color.Black.copy(alpha=.5f),radius+.5.dp.toPx(),center)
+                        drawCircle(color.copy(alpha=if(index in FaceDetailPoints) 1f else .7f),radius,center)
+                    }
+                }
+            }
+        }
+        val count=session.landmarks?.faces?.sumOf { it.size } ?: 0
+        Text(if(count>0) "$count POINTS · LOCAL" else "APERÇU LOCAL · EN ATTENTE DU VISAGE",
+            Modifier.align(Alignment.BottomStart).padding(12.dp).background(Navy.copy(alpha=.8f)).padding(6.dp),color=Color.White,fontSize=10.sp)
     }
 }
 @Composable
@@ -210,7 +239,7 @@ private fun SettingsPanel(settings:Settings,vm:WakeViewModel,service:MonitoringS
     Text(if(settings.calibrated) "Référence personnelle enregistrée localement." else "Référence générique utilisée. Une calibration peut améliorer l'adaptation à vos yeux.",color=Muted)
     Text("À l'arrêt, regardez naturellement devant vous, yeux ouverts pendant 3 à 5 secondes.",fontSize=14.sp)
     if(session.preparing) {
-        CameraPreview(service)
+        CameraPreview(service,session)
         session.calibrationProgress?.let { LinearProgressIndicator(progress={it},modifier=Modifier.fillMaxWidth()) }
         Button(onClick={service?.calibrate()},enabled=session.calibrationProgress==null,modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) { Text("Calibrer mes yeux") }
     } else OutlinedButton(onClick=onPrepare,modifier=Modifier.fillMaxWidth()) { Text("Activer la caméra pour calibrer") }
@@ -225,13 +254,15 @@ private fun SettingToggle(title:String,detail:String,checked:Boolean,onChange:(B
     }
 }
 @Composable
-private fun DiagnosticPanel(s:SessionUi) {
+private fun DiagnosticPanel(s:SessionUi,audio:AudioStatus) {
     val p=s.snapshot
     Card { Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
         Text("Mesures expérimentales — aucune estimation d'aptitude à conduire",color=Amber,fontSize=12.sp)
         Text("État : ${p.state}\nQualité : ${s.quality}\nYeux : ${p.left} / ${p.right}\nFermeture observée : ${p.closedMs} ms")
         Text("PERCLOS estimé : ${p.perclos?.let { "%.1f %%".format(it*100) } ?: "Données insuffisantes"}\nCouverture : ${"%.0f".format(p.coverage*100)} %")
         Text("Traitement : ${s.metrics.processingMs} ms\nCadence observée : ${"%.1f".format(s.metrics.observationsPerSecond)} / s\nÉpisode : ${p.episode}")
+        s.visionDiagnostic?.let { Text("Détail analyse : $it",color=Coral) }
+        audio.diagnostic?.let { Text("Détail audio : $it",color=Coral) }
     } }
 }
 @Composable
@@ -251,6 +282,10 @@ private fun qualityLabel(q:Quality)=when(q) {
     Quality.POSE->"Ajustez l'angle du téléphone à l'arrêt"
     Quality.GEOMETRY->"Les deux yeux ne sont pas assez visibles"
     Quality.CAMERA_ERROR->"Caméra indisponible"
+    Quality.ANALYSIS_ERROR->"Analyse du visage interrompue"
     Quality.THERMAL->"Téléphone trop chaud — analyse suspendue"
     Quality.STALE->"Analyse interrompue ou trop lente"
 }
+
+private val FaceDetailPoints=setOf(33,160,158,133,153,144,362,385,387,263,373,380,
+    61,40,37,0,267,270,291,321,314,17,84,91,13,14,468,469,470,471,472,473,474,475,476,477)

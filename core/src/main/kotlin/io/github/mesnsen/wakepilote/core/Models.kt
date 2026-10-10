@@ -3,7 +3,7 @@ package io.github.mesnsen.wakepilote.core
 enum class MonitorState { INACTIVE, INITIALIZING, MONITORING, SUSPECTED_DROWSINESS, ALERTING, RECOVERING, MONITORING_UNAVAILABLE }
 enum class AlertLevel { NONE, EARLY, URGENT }
 enum class EyeState { OPEN, CLOSED, UNKNOWN }
-enum class Quality { GOOD, NO_FACE, AMBIGUOUS_FACE, POOR_LIGHT, POSE, GEOMETRY, CAMERA_ERROR, THERMAL, STALE }
+enum class Quality { GOOD, NO_FACE, AMBIGUOUS_FACE, POOR_LIGHT, POSE, GEOMETRY, CAMERA_ERROR, ANALYSIS_ERROR, THERMAL, STALE }
 enum class OutputPreference { AUTO, PHONE, CAR }
 
 data class Settings(
