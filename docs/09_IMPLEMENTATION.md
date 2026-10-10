@@ -22,6 +22,7 @@ Développement autorisé le 10 octobre 2026. Cette page décrit le code du proto
 - L'aperçu est masqué au démarrage de la surveillance pour limiter la distraction ; il reste activable. L'assombrissement concerne la fenêtre, pas une garantie de maintien après verrouillage système.
 - En cas de chaleur sévère remontée par Android, la caméra est détachée et la surveillance déclarée indisponible. À chaleur modérée, la cadence cible passe de 15 à 10 analyses/s. Aucune performance énergétique n'est revendiquée.
 - La version fournit des chaînes françaises ; une localisation complète des messages internes et diagnostics reste une amélioration ultérieure.
+- L'APK est limité à ARM64. La dépendance MediaPipe choisie ne fournit pas de binaire x86_64 : inclure des bibliothèques x86_64 partielles provoquait l'échec du chargement natif sur émulateur. La CI utilise l'image Google APIs Android 15 et sa traduction ARM.
 
 ## Versions figées
 
@@ -45,7 +46,7 @@ Versions stables choisies pour un ensemble reproductible, sans prétendre qu'il 
 
 L'application ne demande ni Internet, ni localisation, ni microphone. Les images et landmarks complets restent dans la chaîne de traitement en mémoire, puis sont libérés. Les données scalaires de calibration sont conservées localement et effaçables depuis les paramètres. Les sauvegardes cloud et transferts automatiques de données applicatives sont désactivés par le manifeste et les règles d'extraction.
 
-Le marqueur de session permet de signaler une interruption au prochain lancement ; un processus tué ne peut pas prévenir en temps réel. Aucune télémétrie distante n'est ajoutée. La [notice de confidentialité](10_CONFIDENTIALITE.md) décrit cette version et devra être complétée par les coordonnées de l'éditeur avant une publication en magasin.
+Le marqueur de session permet de signaler une interruption au prochain lancement ; un processus tué ne peut pas prévenir en temps réel. La télémétrie du SDK MediaPipe amont est retirée par une transformation documentée et vérifiée par hash : fabrique remplacée par le logger officiel sans effet, classes d'envoi supprimées et DataTransport exclu. Le manifeste interdit les permissions réseau et la CI inspecte l'APK final. Voir les [notices de modification](../third_party/NOTICES.md). La [notice de confidentialité](10_CONFIDENTIALITE.md) décrit cette version et devra être complétée par les coordonnées de l'éditeur avant une publication en magasin.
 
 ## Qualification et limites
 

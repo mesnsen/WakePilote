@@ -4,7 +4,7 @@ Projet d'application Android de détection de signes de somnolence, avec analyse
 
 **Version 0.1.0 — prototype Android expérimental, développement autorisé le 10 octobre 2026.**
 
-Le dépôt contient maintenant une application native Kotlin/Compose, le modèle MediaPipe embarqué, un moteur de règles indépendant d'Android, les tests et GitHub Actions. Les documents de conception ci-dessous restent le plan de référence historique. Le [bilan d'implémentation](docs/09_IMPLEMENTATION.md) décrit la version réelle et ses limites ; ne pas confondre une fonctionnalité codée avec une validation sur téléphone ou véhicule.
+Le dépôt contient maintenant une application native Kotlin/Compose qui embarque le modèle MediaPipe lors de la compilation, un moteur de règles indépendant d'Android, les tests et GitHub Actions. Les documents de conception ci-dessous restent le plan de référence historique. Le [bilan d'implémentation](docs/09_IMPLEMENTATION.md) décrit la version réelle et ses limites ; ne pas confondre une fonctionnalité codée avec une validation sur téléphone ou véhicule.
 
 ## Fonctions du prototype
 
