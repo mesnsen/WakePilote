@@ -50,6 +50,8 @@ Le JSON utilise `schemaVersion=1`, `algorithmVersion=wake-rules-0.1.2` et le has
 
 Les coordonnées sont normalisées dans l'image d'analyse redressée, avant miroir d'affichage. Les valeurs absentes ou non finies sont exportées en `null`. Les mauvaises mesures restent utiles et sont conservées avec leur qualité ; une mesure vieille de plus de 500 ms est marquée `STALE`, sans devenir une preuve pour la surveillance. L'enregistrement est limité à une mesure toutes les 50 ms et à 90 mesures maximum par clip. Aucun pixel n'est retenu.
 
+L'annotation humaine porte sur la séquence entière, pas sur chacune de ses images. Les états `predictedLeft` et `predictedRight` restent des prédictions. Une analyse ultérieure doit repérer les transitions et les portions stables avant de déduire des seuils ; elle ne doit pas transformer automatiquement toutes les mesures d'un clip en vérités étiquetées.
+
 ## Vérifications
 
 Les régressions couvrent les séquences ouvertes/fermées, les clignements, les bâillements, les trous temporels, la conservation des mesures rejetées, la différence entre prédiction et annotation, la persistance, le JSON, le parcours OK / Pas OK, le compte à rebours, l'export via le résolveur Android et l'annulation lors d'une sortie. Les résultats exécutés sont consignés dans [VALIDATION_RESULTS.md](VALIDATION_RESULTS.md).
