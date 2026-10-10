@@ -96,7 +96,7 @@ class MonitoringService:LifecycleService() {
         SessionHub.mutable.value=SessionUi(running=monitoring,preparing=!monitoring,foregroundOnly=visibleOnly)
         try {
             ServiceCompat.startForeground(this,NOTIFICATION_SESSION,notification(if(monitoring) "Initialisation de la surveillance" else "Cadrage — surveillance arrêtée"),
-                if(Build.VERSION.SDK_INT>=29) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0)
+                if(Build.VERSION.SDK_INT>=30) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0)
             startedForeground=true
         } catch(e:RuntimeException) {
             SessionHub.mutable.value=SessionUi(error="Android n'a pas autorisé le démarrage de la caméra (${e.javaClass.simpleName})")

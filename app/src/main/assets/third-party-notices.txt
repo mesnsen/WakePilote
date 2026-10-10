@@ -16,3 +16,13 @@ La carte Face Mesh indique que le modèle n'est pas destiné aux décisions crit
 Bibliothèques : Kotlin, coroutines, AndroidX, MediaPipe et Gradle sont utilisées selon leurs licences respectives, notamment Apache 2.0. Les distributions conservent leurs notices embarquées. Le texte Apache fourni ici ne définit pas une licence générale pour le code original du projet.
 
 Les sons sont synthétisés localement par le code de WakePilote ; aucun extrait sonore tiers n'est redistribué. Aucun service audio ou modèle ne nécessite un téléchargement pendant la session.
+
+## Modification de MediaPipe Tasks Core — 10 octobre 2026
+
+WakePilote modifie l'AAR `com.google.mediapipe:tasks-core:0.10.26.1` (Apache 2.0 ; The MediaPipe Authors), dont le SHA-256 original est `f4bcadaab6ae07e2ac2b4710da9f0b193603990f06832a8aefd81215b791981b`.
+
+La transformation reproductible `buildSrc/src/main/java/wakepilote/gradlelogic/OfflineMediaPipe.java` remplace les deux références de `TasksStatsProtoLogger` par `TasksStatsDummyLogger` dans la fabrique de journalisation. Elle supprime `TasksStatsProtoLogger` et `RemoteLoggingClient`. Les bibliothèques natives et le modèle ne sont pas modifiés. Les dépendances Google DataTransport sont exclues. Tout changement de l'AAR ou de sa structure interrompt la compilation et impose une revue de cette modification.
+
+Ce changement empêche la collecte et la mise en file de métriques d'usage par cette partie de MediaPipe ; la fabrique retourne son implémentation officielle sans effet. La suppression des permissions réseau constitue une protection supplémentaire. Le test instrumenté contrôle la fabrique et l'absence des classes de télémétrie.
+
+Références : [avis de confidentialité MediaPipe](https://github.com/google-ai-edge/mediapipe#privacy-notice), [TasksStatsDummyLogger](https://developers.google.com/edge/api/mediapipe/java/com/google/mediapipe/tasks/core/logging/TasksStatsDummyLogger).

@@ -15,7 +15,8 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        // MediaPipe 0.10.26.1 does not ship x86_64. Do not advertise a partial ABI.
+        ndk { abiFilters += "arm64-v8a" }
     }
     buildFeatures { compose = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

@@ -15,7 +15,7 @@ Le dépôt contient maintenant une application native Kotlin/Compose, le modèle
 - Service caméra et notifications avec commandes distinctes pour arrêter le son ou terminer la surveillance.
 - Calibration facultative, réglages locaux, interface française, aucun compte ni permission réseau.
 
-L'APK cible Android 8 ou ultérieur, sur architecture **arm64-v8a** ; x86_64 est inclus pour les tests sur émulateur. Une version Android compatible ne garantit pas la disponibilité de la caméra ou de l'audio en arrière-plan sur tous les constructeurs.
+L'APK cible Android 8 ou ultérieur, sur architecture **arm64-v8a** uniquement. La CI utilise la traduction ARM de l'image Google APIs Android 15 sur émulateur x86_64 ; MediaPipe 0.10.26.1 ne fournit pas de bibliothèque native x86_64. Une version Android compatible ne garantit pas la disponibilité de la caméra ou de l'audio en arrière-plan sur tous les constructeurs.
 
 ## Compiler et vérifier
 
@@ -23,12 +23,12 @@ Prérequis : JDK 17, Android SDK 36 et Build Tools 35.0.0. Définir `ANDROID_HOM
 
 ```bash
 python3 scripts/fetch_model.py
-./gradlew :core:test :app:assembleDebug :app:lintDebug
+./gradlew :core:test :app:assembleDebug :app:lintDebug :audio:lintDebug :vision:lintDebug :data:lintDebug
 python3 scripts/verify_apk.py app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:connectedDebugAndroidTest
 ```
 
-La dernière commande nécessite un appareil ou un émulateur. Elle vérifie le chargement natif du modèle sur une image synthétique, les permissions et le premier parcours ; elle ne mesure pas les performances sur un visage réel.
+La dernière commande nécessite un appareil ou un émulateur. Elle vérifie le chargement natif du modèle sur une image synthétique, les permissions, la suppression de la télémétrie et le premier parcours ; elle ne mesure pas les performances sur un visage réel. Une [modification documentée de MediaPipe](third_party/NOTICES.md) retire la collecte de métriques du SDK amont ; son hash et sa structure sont contrôlés à chaque compilation.
 
 L'APK se trouve dans `app/build/outputs/apk/debug/app-debug.apk`. Le workflow [Android](.github/workflows/android.yml) publie l'artefact `WakePilote-0.1.0-debug` et les rapports. Un APK debug est signé pour les essais ; les signatures locales et CI peuvent différer. Si Android refuse une mise à jour pour incompatibilité de signature, il faut désinstaller la précédente version de test, ce qui efface ses réglages. Aucune signature de production n'est créée ou conservée dans ce dépôt.
 

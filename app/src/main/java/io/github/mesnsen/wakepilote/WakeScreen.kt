@@ -112,7 +112,7 @@ fun WakeScreen(vm:WakeViewModel,service:MonitoringService?,onPrepare:()->Unit,on
                         if(audio.playing && !urgent) OutlinedButton(onClick=onSilence,modifier=Modifier.fillMaxWidth().heightIn(min=60.dp)) { Text(stringResource(R.string.stop_alert)) }
                         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                             OutlinedButton(onClick={dim=!dim;onDim(dim)},modifier=Modifier.weight(1f).heightIn(min=54.dp)) { Text(if(dim) "Éclaircir" else "Assombrir") }
-                            OutlinedButton(onClick=onStop,modifier=Modifier.weight(1f).heightIn(min=54.dp)) { Text("Terminer") }
+                            OutlinedButton(onClick=onStop,modifier=Modifier.weight(1f).heightIn(min=54.dp)) { Text(stringResource(R.string.stop_monitoring)) }
                         }
                     } else {
                         OutlinedButton(onClick={if(testAudio.playing) vm.stopTest() else vm.test()},modifier=Modifier.fillMaxWidth().heightIn(min=54.dp)) {

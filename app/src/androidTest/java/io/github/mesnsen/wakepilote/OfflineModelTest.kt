@@ -8,6 +8,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.core.logging.TasksStatsDummyLogger
+import com.google.mediapipe.tasks.core.logging.TasksStatsLoggerFactory
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import org.junit.Assert.*
@@ -34,7 +36,16 @@ class OfflineModelTest {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         @Suppress("DEPRECATION")
         val permissions=context.packageManager.getPackageInfo(context.packageName,PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toSet()
-        listOf(Manifest.permission.INTERNET,Manifest.permission.RECORD_AUDIO,Manifest.permission.ACCESS_FINE_LOCATION,
+        listOf(Manifest.permission.INTERNET,Manifest.permission.ACCESS_NETWORK_STATE,Manifest.permission.RECORD_AUDIO,Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION).forEach { assertFalse("Unexpected permission: $it",it in permissions) }
+    }
+    @Test fun telemetryIsAbsentAndFactoryUsesNoOpLogger() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        assertTrue(TasksStatsLoggerFactory.create(context,"FaceLandmarker","VIDEO") is TasksStatsDummyLogger)
+        listOf("com.google.mediapipe.tasks.core.logging.RemoteLoggingClient",
+            "com.google.mediapipe.tasks.core.logging.TasksStatsProtoLogger",
+            "com.google.android.datatransport.runtime.TransportRuntime").forEach { name ->
+            assertTrue("Telemetry class present: $name",runCatching { Class.forName(name) }.exceptionOrNull() is ClassNotFoundException)
+        }
     }
 }

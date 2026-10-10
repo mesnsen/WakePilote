@@ -25,9 +25,11 @@ jobs:
       - name: Fetch pinned model for packaging
         run: python3 scripts/fetch_model.py
       - name: Unit tests, Android build and lint
-        run: ./gradlew :core:test :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug --stacktrace
+        run: ./gradlew :core:test :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :audio:lintDebug :vision:lintDebug :data:lintDebug --stacktrace
       - name: Check native 16 KB alignment and model
-        run: python3 scripts/verify_apk.py app/build/outputs/apk/debug/app-debug.apk
+        run: |
+          python3 scripts/verify_apk.py app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 4 app/build/outputs/apk/debug/app-debug.apk
       - name: Versioned APK
         run: |
           mkdir -p artifacts
@@ -46,6 +48,9 @@ jobs:
           path: |
             core/build/reports/tests/
             app/build/reports/lint-results-debug.*
+            audio/build/reports/lint-results-debug.*
+            vision/build/reports/lint-results-debug.*
+            data/build/reports/lint-results-debug.*
           retention-days: 14
   instrumented:
     runs-on: ubuntu-latest
@@ -74,6 +79,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
+            adb shell getprop ro.product.cpu.abilist
             adb shell svc wifi disable
             adb shell svc data disable
             ./gradlew :app:connectedDebugAndroidTest --stacktrace

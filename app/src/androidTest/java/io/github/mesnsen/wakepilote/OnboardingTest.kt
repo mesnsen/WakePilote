@@ -15,6 +15,9 @@ class OnboardingTest {
             compose.onAllNodesWithText("J'ai compris — préparer mon trajet").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("J'ai compris — préparer mon trajet").performScrollTo().performClick()
+        compose.waitUntil(15000) {
+            compose.onAllNodesWithText("Démarrer la surveillance").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("Démarrer la surveillance").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Surveillance arrêtée").assertExists()
     }

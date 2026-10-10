@@ -133,11 +133,11 @@ class AlertPlayer(context:Context) : AutoCloseable {
     private fun updateRoute(detail:String?=null) {
         val t=track ?: return
         val device=t.routedDevice
-        val route=when(device?.type) {
-            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Haut-parleur du téléphone"
-            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLE_SPEAKER,AudioDeviceInfo.TYPE_BLE_HEADSET -> "Bluetooth multimédia"
-            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Écouteurs filaires"
-            null -> "Sortie non vérifiée"
+        val route=when {
+            device==null -> "Sortie non vérifiée"
+            device.type==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Haut-parleur du téléphone"
+            multimediaBluetooth(device) -> "Bluetooth multimédia"
+            device.type==AudioDeviceInfo.TYPE_WIRED_HEADPHONES || device.type==AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Écouteurs filaires"
             else -> "Sortie audio Android"
         }
         val mismatch = device!=null && ((settings.output==OutputPreference.PHONE && device.type!=AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) ||
@@ -159,7 +159,7 @@ class AlertPlayer(context:Context) : AutoCloseable {
     }
     private fun phone()=manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.type==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
     private fun multimediaBluetooth(d:AudioDeviceInfo)=d.type==AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-        d.type==AudioDeviceInfo.TYPE_BLE_HEADSET || d.type==AudioDeviceInfo.TYPE_BLE_SPEAKER
+        (Build.VERSION.SDK_INT>=31 && (d.type==AudioDeviceInfo.TYPE_BLE_HEADSET || d.type==AudioDeviceInfo.TYPE_BLE_SPEAKER))
     private fun attributes()=AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
     private fun tone(frequency:Double,urgent:Boolean):ShortArray = ShortArray(24000) { i ->
         val time=i/24000.0
