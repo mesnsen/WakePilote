@@ -1,0 +1,375 @@
+# Projet Android — Application de détection de somnolence au volant
+
+## 1. Ton rôle
+
+Tu es un développeur Android senior, expert en Kotlin, CameraX, intelligence artificielle embarquée, MediaPipe, traitement vidéo temps réel, audio Bluetooth et UX automobile.
+
+Tu dois concevoir puis développer une application mobile Android capable d'identifier les signes de somnolence d'un conducteur et de déclencher des alertes sonores pour l'inviter à s'arrêter en sécurité.
+
+L'application doit être simple, fiable, performante et utilisable sans connexion Internet.
+
+**Important : commence par produire l'architecture, le plan de développement et l'analyse des risques. N'écris aucun code avant mon autorisation.**
+
+## 2. Objectif fonctionnel
+
+L'utilisateur fixe son smartphone sur un support orienté vers son visage, ouvre l'application et appuie sur un bouton pour lancer la surveillance.
+
+La caméra frontale analyse en continu les signes faciaux associés à la somnolence.
+
+Si un risque est détecté :
+- Déclencher une alerte sonore sur le téléphone ou, lorsque la sortie audio est effectivement disponible, sur les haut-parleurs du véhicule.
+- Afficher une interface d'alerte avec un gros bouton « Arrêter l'alerte ».
+- Arrêter automatiquement le son lorsque les signes immédiats de fermeture des yeux ont disparu de manière stable.
+- Permettre l'arrêt manuel du son si l'arrêt automatique ne fonctionne pas.
+- Continuer la surveillance après l'arrêt de l'alerte.
+- Recommander au conducteur de s'arrêter en sécurité.
+
+Le système ne doit jamais prétendre certifier qu'un conducteur est éveillé, apte à conduire ou en sécurité.
+
+## 3. Contraintes principales
+
+- Application Android native en Kotlin.
+- Utilisation de Jetpack Compose et d'une architecture MVVM.
+- Traitement vidéo local, sans cloud.
+- Aucun compte utilisateur obligatoire.
+- Aucun abonnement ou service payant pour la V1.
+- Aucun besoin de connexion Internet pendant la surveillance.
+- Pas d'enregistrement des images ni des vidéos du conducteur.
+- Pas de reconnaissance d'identité.
+- Ne pas accéder aux commandes du véhicule.
+- Interface minimaliste et adaptée à la conduite.
+- Pas de publicité affichée pendant une session.
+- Consommation CPU, batterie et mémoire maîtrisée.
+- Utilisation d'API Android publiques et conformes aux restrictions récentes.
+
+## 4. Stack technique recommandée
+
+- Langage : Kotlin.
+- Interface : Jetpack Compose.
+- Caméra : CameraX.
+- Vision IA : MediaPipe Face Landmarker avec modèle embarqué.
+- Traitement : flux vidéo temps réel, landmarks faciaux et blendshapes.
+- État applicatif : StateFlow et coroutines.
+- Moteur de décision : module Kotlin indépendant et testable.
+- Audio : AudioManager, AudioFocusRequest, API de routage audio et lecteur local d'alertes.
+- Persistance : DataStore pour les préférences.
+- Surveillance : Foreground Service de type camera lorsque cela est autorisé.
+- Notifications : notification persistante de surveillance et notification d'alerte avec action d'arrêt.
+- Tests : JUnit, tests d'intégration Android et tests instrumentés.
+- Livraison : GitHub Actions pour compiler, tester et produire un APK.
+
+Privilégier la compatibilité avec les smartphones Android récents. Justifier les versions SDK retenues et vérifier les exigences actuelles de Google Play.
+
+## 5. Analyse de somnolence
+
+Utiliser MediaPipe Face Landmarker pour mesurer plusieurs signaux.
+
+### A. Surveillance des yeux
+
+Analyser :
+- L'ouverture de l'œil gauche et de l'œil droit.
+- Les fermetures simultanées prolongées.
+- La durée des clignements.
+- Les clignements inhabituels.
+- L'Eye Aspect Ratio si exploitable.
+- Le PERCLOS sur une fenêtre glissante.
+- Les évolutions par rapport à une référence individuelle.
+
+Le moteur doit distinguer les clignements normaux des fermetures prolongées.
+
+Tous les calculs temporels doivent utiliser les timestamps réels, et non simplement le nombre de frames.
+
+### B. Surveillance de la bouche
+
+Analyser les bâillements potentiels via les points faciaux et les coefficients d'expressions.
+
+Distinguer autant que possible un bâillement d'une conversation, d'un sourire ou de mouvements ordinaires.
+
+Ne pas déclencher une alerte sévère sur un seul bâillement isolé.
+
+### C. Surveillance des mouvements de tête
+
+Suivre les variations d'orientation du visage pour identifier les mouvements répétés compatibles avec une baisse de vigilance.
+
+Éviter de confondre les mouvements normaux de consultation des rétroviseurs avec un signe de somnolence.
+
+### D. Score de risque
+
+Créer un moteur de règles combinant les indicateurs précédents.
+
+Prévoir les états :
+- INACTIVE
+- INITIALIZING
+- MONITORING
+- SUSPECTED_DROWSINESS
+- ALERTING
+- RECOVERING
+- MONITORING_UNAVAILABLE
+
+Prévoir une détection prioritaire des fermetures prolongées des deux yeux, même lorsque les autres indicateurs sont absents.
+
+Les premiers seuils seront expérimentaux et configurables. Ils devront être ajustés à partir de tests documentés, sans les présenter comme des seuils médicaux validés.
+
+Introduire de l'hystérésis et des temporisations pour éviter les changements rapides d'état.
+
+## 6. Réduction des faux positifs
+
+Le système ne doit pas déclencher systématiquement une alerte pour :
+- Un clignement ordinaire.
+- Un bref regard sur le tableau de bord.
+- Une rotation momentanée du visage.
+- Un mouvement lié à une bosse.
+- Une petite variation d'éclairage.
+- Une perte de détection de quelques frames.
+
+Prévoir une calibration facultative et très courte avant le départ, permettant d'obtenir une référence d'ouverture des yeux.
+
+Si la calibration est ignorée, utiliser des paramètres par défaut raisonnables en indiquant les limites de fiabilité.
+
+Si le visage n'est plus détecté, ne pas conclure que les yeux sont fermés. Passer en état de surveillance indisponible après un délai défini et produire un avertissement distinct, non confondu avec une alerte de somnolence.
+
+## 7. Gestion intelligente des alertes
+
+Créer un moteur d'alerte indépendant du détecteur facial.
+
+Deux niveaux minimum :
+- Avertissement précoce : signal modéré lorsqu'une anomalie persistante apparaît.
+- Alerte urgente : son clairement identifiable en cas de fermeture prolongée ou de risque important.
+
+Éviter les sons excessivement violents pouvant provoquer une réaction de surprise.
+
+Pendant une alerte :
+- Afficher « Fatigue suspectée — arrêtez-vous dès que possible en sécurité ».
+- Afficher un gros bouton « Arrêter l'alerte » si l'application est visible.
+- Permettre l'arrêt via une action de notification si une autre application est au premier plan.
+- Activer une vibration si le téléphone le permet.
+- Permettre l'arrêt automatique après une période paramétrable de réouverture stable des yeux et de détection fiable.
+- Ne jamais interpréter cette réouverture comme une preuve de vigilance retrouvée.
+
+L'arrêt manuel doit stopper immédiatement le son actuel, sans désactiver la surveillance.
+
+Si un signe critique persiste après cet arrêt, l'alerte doit pouvoir reprendre après un court délai de sécurité.
+
+Prévoir une limitation des répétitions intempestives et un avertissement de pause fortement recommandé en cas d'alertes répétées.
+
+Séparer clairement « Arrêter l'alerte » et « Terminer la surveillance ».
+
+## 8. Audio smartphone et Bluetooth voiture
+
+L'application doit fonctionner sans véhicule connecté.
+
+Prévoir trois possibilités de réglage :
+- Automatique : suivre une sortie audio réellement disponible et vérifiée.
+- Smartphone : utiliser les haut-parleurs du téléphone lorsque le routage le permet.
+- Sortie voiture : utiliser la sortie multimédia du véhicule lorsqu'elle est effectivement disponible.
+
+Utiliser les API Android pour détecter les périphériques audio, le routage effectif et les changements de sortie.
+
+Gérer l'audio focus pour permettre à une alerte de se faire entendre lorsqu'une application musicale est active, dans les limites imposées par Android.
+
+Ne jamais supposer qu'une simple connexion Bluetooth garantit que le son sortira sur les haut-parleurs du véhicule.
+
+Ne pas utiliser des API privées pour forcer le volume ou contourner les paramètres système.
+
+Avant chaque départ, prévoir un bouton « Tester mon alerte » et afficher la sortie audio utilisée.
+
+Gérer explicitement les erreurs de routage, les appels téléphoniques, les volumes faibles et les interruptions de connexion.
+
+## 9. UX et ergonomie
+
+L'expérience utilisateur est une priorité absolue.
+
+### Premier lancement
+
+Afficher un onboarding très court expliquant :
+1. Pourquoi la caméra est nécessaire.
+2. Comment fixer le téléphone pour rendre le visage visible.
+3. Comment fonctionne l'alerte.
+4. Les limites du système.
+
+Demander uniquement les autorisations nécessaires, avec une explication compréhensible.
+
+### Écran principal
+
+Afficher :
+- Un grand bouton « Démarrer la surveillance ».
+- Un statut « Visage détecté » ou « Positionner le téléphone ».
+- Un statut de la sortie audio.
+- Un bouton « Tester l'alerte ».
+- Un accès discret aux paramètres.
+
+Éviter les menus complexes.
+
+### Pendant la surveillance
+
+Afficher uniquement les informations utiles :
+- Surveillance active.
+- Détection du visage opérationnelle ou indisponible.
+- Sortie audio choisie.
+- Commande permettant de terminer la session.
+
+L'écran doit pouvoir s'assombrir sans interrompre volontairement le service.
+
+Prévoir un aperçu caméra désactivable pour réduire la distraction et la consommation.
+
+### En cas d'alerte
+
+Si l'application est au premier plan, afficher un écran très lisible avec un bouton d'arrêt de grande taille.
+
+Si une autre application est au premier plan, utiliser les notifications Android et leurs actions, sans dépendre d'un écran plein écran forcé ni d'un overlay invasif.
+
+Le conducteur ne doit pas avoir à effectuer plusieurs manipulations pour arrêter le son.
+
+### Paramètres
+
+Proposer seulement :
+- Sensibilité : normale ou renforcée.
+- Intensité sonore dans les limites autorisées.
+- Sortie audio.
+- Vibration activée ou désactivée.
+- Calibration facultative.
+
+Placer les seuils techniques dans une section avancée ou de diagnostic, invisible par défaut.
+
+## 10. Gestion de la caméra et des performances
+
+La surveillance doit pouvoir continuer lorsque l'utilisateur ouvre une application GPS, sous réserve des possibilités réelles d'Android et du téléphone.
+
+Démarrer le service caméra depuis une activité visible et respecter les permissions et les restrictions Android.
+
+Afficher une notification persistante permettant d'arrêter la surveillance.
+
+Tester les comportements avec l'écran verrouillé, les optimisations batterie et les différents fabricants. Ne jamais prétendre que la caméra reste active si le système l'a suspendue.
+
+Utiliser CameraX ImageAnalysis avec une stratégie supprimant les frames anciennes lorsque l'analyse est en retard.
+
+Chercher une fréquence d'analyse suffisante pour observer correctement les clignements et les fermetures prolongées, sans imposer un FPS constant sur tous les appareils.
+
+Mesurer CPU, mémoire, chauffe, latence et décharge de batterie.
+
+Prévoir une dégradation contrôlée des performances si le téléphone surchauffe.
+
+Si la caméra devient inaccessible ou si la qualité des images devient insuffisante, l'application doit afficher clairement que la surveillance n'est plus fiable.
+
+## 11. Validation et tests
+
+Construire une stratégie de tests rigoureuse.
+
+Tests unitaires du moteur de décision :
+- Yeux ouverts.
+- Clignement normal.
+- Fermeture prolongée.
+- Réouverture des yeux.
+- Arrêt manuel.
+- Absence de visage.
+- Perte momentanée du suivi.
+- Risque persistant après arrêt manuel.
+- Bâillement isolé.
+- Événements arrivant avec des intervalles irréguliers.
+
+Tests fonctionnels :
+- Fonctionnement hors ligne.
+- Démarrage et arrêt répétés.
+- Application GPS au premier plan.
+- Bluetooth multimédia connecté.
+- Bluetooth uniquement pour les appels.
+- Autoradio réglé sur une source différente.
+- Déconnexion Bluetooth.
+- Appel téléphonique.
+- Batterie faible.
+- Smartphone chaud.
+- Port de lunettes classiques ou de soleil.
+- Visage partiellement masqué.
+- Forte lumière et faible luminosité.
+- Positionnement imparfait du smartphone.
+
+Tester avec des vidéos consenties et des scénarios simulés, sans demander à un conducteur de provoquer une situation de somnolence réelle au volant.
+
+Mesurer le taux de détections correctes, les faux positifs, les cas manqués, la latence de déclenchement et la fiabilité de l'audio.
+
+Aucune performance de sécurité ne doit être annoncée sans validation.
+
+## 12. Sécurité et confidentialité
+
+Les images de la caméra doivent être traitées uniquement en mémoire et supprimées après l'analyse.
+
+Ne pas sauvegarder de vidéo ou de photographie du conducteur en fonctionnement normal.
+
+Ne pas demander d'autorisation microphone, GPS ou réseau si elle n'est pas nécessaire.
+
+Prévoir une politique de confidentialité conforme aux exigences applicables et les déclarations Google Play.
+
+Indiquer clairement les limitations : lunettes opaques, obscurité, mauvais angle de caméra, interruption du service et possibilités de faux positifs ou de non-détection.
+
+Rappeler qu'une alerte n'est pas une solution à la fatigue et que le conducteur doit s'arrêter dans un lieu sûr.
+
+## 13. Planning de développement
+
+Organise le projet dans cet ordre :
+
+**Phase 1 — Étude et architecture**
+- Vérifier les contraintes Android.
+- Comparer ML Kit et MediaPipe pour les besoins exacts.
+- Choisir définitivement l'architecture.
+- Définir les états et les composants.
+- Identifier les risques techniques prioritaires.
+
+**Phase 2 — Prototype caméra**
+- Créer l'application Android.
+- Afficher le flux de la caméra frontale.
+- Intégrer MediaPipe.
+- Détecter les yeux et le visage.
+- Mesurer les performances.
+
+**Phase 3 — Moteur de somnolence**
+- Implémenter les signaux faciaux.
+- Ajouter PERCLOS et détection temporelle.
+- Développer le moteur de décision.
+- Réduire les faux positifs.
+- Créer des tests unitaires.
+
+**Phase 4 — Alertes**
+- Implémenter les alertes sonores et vibratoires.
+- Implémenter l'arrêt automatique.
+- Implémenter l'arrêt manuel.
+- Gérer la répétition et les événements critiques.
+
+**Phase 5 — Audio voiture**
+- Détecter les sorties audio.
+- Gérer le Bluetooth multimédia.
+- Tester les interruptions et changements de périphériques.
+- Ajouter le test sonore avant départ.
+
+**Phase 6 — UX et surveillance**
+- Finaliser les écrans.
+- Gérer les autorisations.
+- Intégrer le service de surveillance Android.
+- Tester la coexistence avec Google Maps et Waze.
+- Optimiser batterie et chauffe.
+
+**Phase 7 — Stabilisation et livraison**
+- Ajouter les tests instrumentés.
+- Corriger les défauts.
+- Préparer la documentation.
+- Configurer GitHub Actions.
+- Générer un APK installable.
+- Préparer les éléments nécessaires à une éventuelle publication Google Play.
+
+## 14. Livrables attendus
+
+Dans ta première réponse, fournis :
+
+1. Une analyse technique détaillée et les principaux risques.
+2. Une architecture modulaire claire.
+3. Le fonctionnement précis de l'algorithme de détection.
+4. Les écrans et les parcours utilisateur.
+5. Un backlog hiérarchisé par priorité.
+6. Les critères d'acceptation de chaque phase.
+7. Une stratégie de validation avant toute utilisation réelle.
+8. Les décisions techniques à prendre avant de coder.
+
+Ensuite, après mon autorisation, tu développeras le projet phase par phase, avec vérification des builds et tests à chaque étape.
+
+Ne te contente pas de produire des fichiers : explique les choix techniques, vérifie leur bon fonctionnement et signale les fonctionnalités qui restent expérimentales.
+
+**Priorité absolue : simplicité d'utilisation, fiabilité des alertes et maîtrise des limites de sécurité.**
