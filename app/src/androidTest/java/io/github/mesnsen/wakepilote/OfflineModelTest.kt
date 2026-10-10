@@ -26,11 +26,15 @@ class OfflineModelTest {
         assertEquals("64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",digest)
         val detector=FaceLandmarker.createFromOptions(context,FaceLandmarker.FaceLandmarkerOptions.builder()
             .setBaseOptions(BaseOptions.builder().setModelAssetPath("face_landmarker.task").build())
-            .setRunningMode(RunningMode.IMAGE).setOutputFaceBlendshapes(true).setOutputFacialTransformationMatrixes(true).build())
-        val bitmap=Bitmap.createBitmap(256,256,Bitmap.Config.ARGB_8888).apply { eraseColor(Color.GRAY) }
-        val input=BitmapImageBuilder(bitmap).build()
-        try { assertTrue(detector.detect(input).faceLandmarks().isEmpty()) }
-        finally { input.close(); bitmap.recycle(); detector.close() }
+            .setRunningMode(RunningMode.VIDEO).setNumFaces(1).setOutputFaceBlendshapes(true).setOutputFacialTransformationMatrixes(true).build())
+        try {
+            for(time in listOf(1L,34L,67L)) {
+                val bitmap=Bitmap.createBitmap(256,256,Bitmap.Config.ARGB_8888).apply { eraseColor(Color.GRAY) }
+                val input=BitmapImageBuilder(bitmap).build()
+                try { assertTrue(detector.detectForVideo(input,time).faceLandmarks().isEmpty()) }
+                finally { input.close() }
+            }
+        } finally { detector.close() }
     }
     @Test fun distributedAppDoesNotRequestNetworkLocationOrMicrophone() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext

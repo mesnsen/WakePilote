@@ -41,6 +41,9 @@ class MonitoringService:LifecycleService() {
     private var startedForeground=false
     private var calibration:Calibration?=null
     private var calibrationStarted=0L
+    private var learningEnabled=false
+    private var lastUiObservation=0L
+    private var lastUiSnapshot=0L
     private var thermalListener:PowerManager.OnThermalStatusChangedListener?=null
     private val notifier get()=getSystemService(NotificationManager::class.java)
     private val tick=object:Runnable {
@@ -48,9 +51,7 @@ class MonitoringService:LifecycleService() {
             val ui=SessionHub.state.value
             val now=SystemClock.elapsedRealtime()
             if(ui.running) apply(engine.tick(now))
-            if(ui.landmarks!=null && now-ui.landmarks.atMs>500) {
-                SessionHub.mutable.update { it.copy(landmarks=null) }
-            }
+            SessionHub.preview.value?.let { if(now-it.atMs>500) SessionHub.mutablePreview.value=null }
             if(ui.preparing && ui.lastObservationMs>0 && now-ui.lastObservationMs>1500) {
                 SessionHub.mutable.update { it.copy(quality=Quality.STALE) }
             }
@@ -70,7 +71,7 @@ class MonitoringService:LifecycleService() {
         scope.launch { player.status.collect { audio -> SessionHub.mutable.update { it.copy(audio=audio) } } }
         if(Build.VERSION.SDK_INT>=29) {
             thermalListener=PowerManager.OnThermalStatusChangedListener { status ->
-                camera?.minIntervalMs=if(status>=PowerManager.THERMAL_STATUS_MODERATE) 100 else 66
+                camera?.minIntervalMs=if(status>=PowerManager.THERMAL_STATUS_MODERATE) 100 else 33
                 camera?.pauseForThermal(status>=PowerManager.THERMAL_STATUS_SEVERE)
                 if(status>=PowerManager.THERMAL_STATUS_SEVERE && SessionHub.state.value.running)
                     apply(engine.unavailable(SystemClock.elapsedRealtime(),Quality.THERMAL))
@@ -98,6 +99,8 @@ class MonitoringService:LifecycleService() {
         camera?.close(); camera=null; player.stop(); engine.stop(); calibration=null
         earlySerial=0; lastUnavailableSound=Long.MIN_VALUE/2; unavailableQuietUntil=0
         SessionHub.mutable.value=SessionUi(running=monitoring,preparing=!monitoring,foregroundOnly=visibleOnly)
+        SessionHub.mutablePreview.value=null
+        lastUiObservation=0; lastUiSnapshot=0
         try {
             ServiceCompat.startForeground(this,NOTIFICATION_SESSION,notification(if(monitoring) "Initialisation de la surveillance" else "Cadrage — surveillance arrêtée"),
                 if(Build.VERSION.SDK_INT>=30) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0)
@@ -113,19 +116,30 @@ class MonitoringService:LifecycleService() {
             if(monitoring) { engine.start(SystemClock.elapsedRealtime()); repository.markSession(true) }
             if(session!=token) return@launch
             camera=FaceCamera(this@MonitoringService,this@MonitoringService,
-                { observation,metrics,landmarks -> if(session==token) process(observation,metrics,landmarks) },
+                { observation,metrics,landmarks,features -> if(session==token) process(observation,metrics,landmarks,features) },
                 { failure -> if(session==token) {
-                    SessionHub.mutable.update { it.copy(error=failure.message,quality=failure.quality,landmarks=null,visionDiagnostic=failure.diagnostic) }
+                    SessionHub.mutablePreview.value=null
+                    SessionHub.mutable.update { it.copy(error=failure.message,quality=failure.quality,visionDiagnostic=failure.diagnostic) }
                     if(SessionHub.state.value.running) apply(engine.unavailable(SystemClock.elapsedRealtime(),failure.quality))
-                } }).also { it.setSurface(requestedSurface); it.start() }
+                } },
+                { zoom -> if(session==token) SessionHub.mutable.update { it.copy(zoom=zoom) } }).also {
+                    it.collectFeatures=learningEnabled && !monitoring
+                    it.setZoom(settings.cameraZoom); it.setSurface(requestedSurface); it.start()
+                }
             handler.removeCallbacks(tick); handler.post(tick)
         }
     }
-    private fun process(o:Observation,metrics:VisionMetrics,landmarks:FaceLandmarks?) {
+    private fun process(o:Observation,metrics:VisionMetrics,landmarks:FaceLandmarks?,features:FaceFeatures?) {
         val now=SystemClock.elapsedRealtime()
+        if(learningEnabled && SessionHub.state.value.preparing)
+            SessionHub.mutableSamples.tryEmit(CameraSample(if(now-o.atMs>500) o.copy(quality=Quality.STALE) else o,
+                metrics,SessionHub.state.value.zoom.actual,features))
         if(now-o.atMs>500) return // never publish a frozen pipeline as fresh
-        SessionHub.mutable.update { it.copy(lastObservationMs=o.atMs,quality=o.quality,metrics=metrics,error=null,
-            landmarks=landmarks,visionDiagnostic=null) }
+        SessionHub.mutablePreview.value=landmarks
+        if(now-lastUiObservation>=100 || SessionHub.state.value.quality!=o.quality || SessionHub.state.value.error!=null) {
+            lastUiObservation=now
+            SessionHub.mutable.update { it.copy(lastObservationMs=o.atMs,quality=o.quality,metrics=metrics,error=null,visionDiagnostic=null) }
+        }
         if(SessionHub.state.value.running) apply(engine.observe(o,now))
         else calibration?.let { c ->
             val result=c.add(o)
@@ -139,7 +153,11 @@ class MonitoringService:LifecycleService() {
     }
     private fun apply(snapshot:Snapshot) {
         val now=SystemClock.elapsedRealtime()
-        SessionHub.mutable.update { it.copy(snapshot=snapshot,quality=snapshot.quality) }
+        val previous=SessionHub.state.value.snapshot
+        if(now-lastUiSnapshot>=100 || previous.state!=snapshot.state || previous.level!=snapshot.level || previous.soundRequested!=snapshot.soundRequested) {
+            lastUiSnapshot=now
+            SessionHub.mutable.update { it.copy(snapshot=snapshot,quality=snapshot.quality) }
+        }
         player.urgent(snapshot.soundRequested,settings)
         if(snapshot.warningSerial!=earlySerial) { earlySerial=snapshot.warningSerial; player.early(settings) }
         if(snapshot.state==MonitorState.MONITORING_UNAVAILABLE && !snapshot.soundRequested &&
@@ -170,11 +188,20 @@ class MonitoringService:LifecycleService() {
         lastNotification=""
     }
     fun calibrate() {
-        if(!SessionHub.state.value.preparing) return
+        if(!SessionHub.state.value.preparing || learningEnabled) return
         calibration=Calibration(); calibrationStarted=SystemClock.elapsedRealtime()
         SessionHub.mutable.update { it.copy(calibrationProgress=0f,calibrationMessage=null) }
     }
     fun setPreviewSurface(surface:Preview.SurfaceProvider?) { requestedSurface=surface; camera?.setSurface(surface) }
+    fun setZoom(value:Float) { camera?.setZoom(value) }
+    fun setLearningEnabled(value:Boolean) {
+        learningEnabled=value && !SessionHub.state.value.running
+        camera?.collectFeatures=learningEnabled
+        if(learningEnabled) {
+            calibration=null
+            SessionHub.mutable.update { it.copy(calibrationProgress=null) }
+        }
+    }
     fun uiHidden() {
         setPreviewSurface(null)
         if(SessionHub.state.value.preparing || SessionHub.state.value.foregroundOnly) terminate()
@@ -183,6 +210,7 @@ class MonitoringService:LifecycleService() {
         ++session; handler.removeCallbacks(tick); calibration=null
         camera?.close(); camera=null; player.stop(); engine.stop()
         SessionHub.mutable.value=SessionUi()
+        SessionHub.mutablePreview.value=null
         scope.launch { repository.markSession(false) }
         notifier.cancel(NOTIFICATION_ALERT); lastNotification=""
         if(startedForeground) { stopForeground(STOP_FOREGROUND_REMOVE); startedForeground=false }
@@ -205,7 +233,8 @@ class MonitoringService:LifecycleService() {
         ++session; handler.removeCallbacksAndMessages(null); camera?.close(); camera=null
         player.close(); scope.cancel()
         if(Build.VERSION.SDK_INT>=29) thermalListener?.let { getSystemService(PowerManager::class.java).removeThermalStatusListener(it) }
-        SessionHub.mutable.update { it.copy(running=false,preparing=false,snapshot=Snapshot(),calibrationProgress=null,landmarks=null) }
+        SessionHub.mutablePreview.value=null
+        SessionHub.mutable.update { it.copy(running=false,preparing=false,snapshot=Snapshot(),calibrationProgress=null) }
         super.onDestroy()
     }
     companion object {

@@ -17,6 +17,18 @@ import kotlin.math.*
 
 @RunWith(AndroidJUnit4::class)
 class CameraPipelineTest {
+    @Test fun learningKeepsRawGeometryEvenWhenLightQualityIsRejected() {
+        val processor=FaceFrameProcessor { _,time -> result(time,listOf(face())) }
+        val bitmap=Bitmap.createBitmap(640,480,Bitmap.Config.ARGB_8888).apply { eraseColor(Color.BLACK) }
+        val frame=processor.process(bitmap,1000,Matrix(),collectFeatures=true)
+        assertEquals(Quality.POOR_LIGHT,frame.observation.quality)
+        assertTrue(frame.observation.leftEar.isFinite())
+        assertEquals(0.0,frame.observation.brightness!!,.01)
+        assertEquals(FaceFrameProcessor.FeatureIndices,frame.features!!.points.map { it.index })
+        val next=processor.process(Bitmap.createBitmap(640,480,Bitmap.Config.ARGB_8888),1100,Matrix())
+        assertNull("Raw learning payload must not be allocated in normal monitoring",next.features)
+    }
+
     @Test fun detectedFaceCanBeMeasuredBeforeItsPixelsAreReleased() {
         // The previous no-face smoke test never reached getPixel(). A detected face must do so.
         val bitmap=Bitmap.createBitmap(640,480,Bitmap.Config.ARGB_8888).apply { eraseColor(Color.LTGRAY) }

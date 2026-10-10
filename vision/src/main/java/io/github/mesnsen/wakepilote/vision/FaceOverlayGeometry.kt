@@ -8,6 +8,9 @@ import io.github.mesnsen.wakepilote.core.Quality
 data class FacePoint(val x:Float,val y:Float)
 data class FaceLandmarks(val atMs:Long,val faces:List<List<FacePoint>>)
 data class VisionFailure(val quality:Quality,val message:String,val diagnostic:String)
+data class CameraZoom(val requested:Float=1.35f,val actual:Float=1f,val maximum:Float=1f) {
+    val previewScale get()=(requested/actual.coerceAtLeast(1f)).coerceIn(1f,3f)
+}
 
 object FaceOverlayGeometry {
     fun uprightToSensor(width:Int,height:Int,rotationDegrees:Int,sensorToBuffer:Matrix):Matrix? {

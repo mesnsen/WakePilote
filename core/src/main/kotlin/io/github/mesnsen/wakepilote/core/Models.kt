@@ -16,6 +16,7 @@ data class Settings(
     val rightReference: Double = 0.28,
     val calibrated: Boolean = false,
     val onboarded: Boolean = false,
+    val cameraZoom: Float = 1.35f,
 ) {
     fun thresholds() = Thresholds(earlyMs = if (reinforced) 600 else 800, urgentMs = if (reinforced) 1200 else 1500,
         earlyScore = if (reinforced) 35.0 else 40.0)
@@ -37,6 +38,7 @@ data class Observation(
     val leftBlink: Double? = null, val rightBlink: Double? = null,
     val mouthRatio: Double? = null, val jawOpen: Double? = null,
     val pitch: Double? = null, val yaw: Double? = null,
+    val brightness: Double? = null, val faceWidth: Double? = null, val faceHeight: Double? = null,
 )
 
 data class Snapshot(

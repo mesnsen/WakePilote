@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -25,12 +26,12 @@ import io.github.mesnsen.wakepilote.core.*
 import io.github.mesnsen.wakepilote.audio.AudioStatus
 import io.github.mesnsen.wakepilote.vision.FaceOverlayGeometry
 
-private val Navy=Color(0xFF0D1822)
-private val Panel=Color(0xFF182733)
-private val Mint=Color(0xFF9EE5C6)
-private val Amber=Color(0xFFF4C775)
-private val Coral=Color(0xFFFFB4A8)
-private val Muted=Color(0xFFAAC0CD)
+internal val Navy=Color(0xFF0D1822)
+internal val Panel=Color(0xFF182733)
+internal val Mint=Color(0xFF9EE5C6)
+internal val Amber=Color(0xFFF4C775)
+internal val Coral=Color(0xFFFFB4A8)
+internal val Muted=Color(0xFFAAC0CD)
 
 @Composable
 fun WakeTheme(content:@Composable ()->Unit) {
@@ -49,11 +50,17 @@ fun WakeScreen(vm:WakeViewModel,service:MonitoringService?,onPrepare:()->Unit,on
     val heard by vm.testHeard.collectAsStateWithLifecycle()
     val testRoute by vm.testRouteObserved.collectAsStateWithLifecycle()
     var parameters by rememberSaveable { mutableStateOf(false) }
+    var learning by rememberSaveable { mutableStateOf(false) }
     var preview by rememberSaveable { mutableStateOf(true) }
     var dim by rememberSaveable { mutableStateOf(false) }
     var diagnostic by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(session.running) { if(!session.running) { dim=false; onDim(false) } else preview=false }
     DisposableEffect(Unit) { onDispose { onDim(false) } }
+    DisposableEffect(service,learning) {
+        service?.setLearningEnabled(learning)
+        onDispose { service?.setLearningEnabled(false) }
+    }
+    DisposableEffect(learning) { onDispose { vm.cancelCapture() } }
     WakeTheme {
         Surface(modifier=Modifier.fillMaxSize(),color=Navy) {
             if(!loaded) Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) { CircularProgressIndicator() }
@@ -67,13 +74,18 @@ fun WakeScreen(vm:WakeViewModel,service:MonitoringService?,onPrepare:()->Unit,on
                         Text("WakePilote",fontWeight=FontWeight.Bold,fontSize=24.sp)
                         Text("VOTRE COMPAGNON DE PAUSE",fontSize=10.sp,letterSpacing=1.4.sp,color=Muted)
                     }
-                    if(!session.running) TextButton(onClick={parameters=!parameters;vm.refreshOutputs()}) {
+                    if(!session.running) TextButton(onClick={learning=false;parameters=!parameters;vm.refreshOutputs()}) {
                         Text(if(parameters) "Fermer" else stringResource(R.string.settings))
                     }
                 }
                 message?.let { Note(it,Amber) { vm.message.value=null } }
                 session.error?.let { Note(it,Coral) }
-                if(parameters && !session.running) SettingsPanel(settings,vm,service,session,onPrepare)
+                if(!session.running && !parameters) Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    FilterChip(selected=!learning,onClick={learning=false},label={Text("Préparation")})
+                    FilterChip(selected=learning,onClick={learning=true;vm.stopTest()},label={Text("Apprentissage")})
+                }
+                if(learning && !session.running) LearningPanel(vm,service,session,onPrepare)
+                else if(parameters && !session.running) SettingsPanel(settings,vm,service,session,onPrepare)
                 else {
                     val urgent=session.snapshot.level==AlertLevel.URGENT
                     if(session.running && urgent) {
@@ -107,7 +119,7 @@ fun WakeScreen(vm:WakeViewModel,service:MonitoringService?,onPrepare:()->Unit,on
                     StatusCard("01",if(session.running) "ANALYSE DU VISAGE" else "CADRAGE DU VISAGE",
                         if(session.running || session.preparing) qualityLabel(session.quality) else "Positionnez votre téléphone",
                         if(session.running) session.snapshot.reason else "Surveillance arrêtée",session.quality!=Quality.GOOD)
-                    if((session.preparing || session.running) && preview) CameraPreview(service,session)
+                    if((session.preparing || session.running) && preview) CameraPreview(service,session,vm::saveZoom)
                     if(session.running || session.preparing) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                         Text("Aperçu caméra",Modifier.weight(1f),color=Muted)
                         Switch(checked=preview,onCheckedChange={preview=it;if(!it) service?.setPreviewSurface(null)})
@@ -175,26 +187,28 @@ private fun StatusCard(number:String,label:String,title:String,description:Strin
     }
 }
 @Composable
-private fun Note(text:String,color:Color,onDismiss:(()->Unit)?=null) {
+internal fun Note(text:String,color:Color,onDismiss:(()->Unit)?=null) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(color.copy(alpha=.11f)).padding(14.dp),verticalAlignment=Alignment.CenterVertically) {
         Text(text,color=color,modifier=Modifier.weight(1f),fontSize=14.sp)
         onDismiss?.let { TextButton(onClick=it) { Text("OK",color=color) } }
     }
 }
 @Composable
-private fun CameraPreview(service:MonitoringService?,session:SessionUi) {
+internal fun CameraPreview(service:MonitoringService?,session:SessionUi,onZoomSaved:(Float)->Unit={},controlsEnabled:Boolean=true) {
     val context=LocalContext.current
-    val view=remember { PreviewView(context).apply { implementationMode=PreviewView.ImplementationMode.COMPATIBLE; scaleType=PreviewView.ScaleType.FIT_CENTER } }
+    val landmarks by SessionHub.preview.collectAsStateWithLifecycle()
+    val view=remember { PreviewView(context).apply { implementationMode=PreviewView.ImplementationMode.COMPATIBLE; scaleType=PreviewView.ScaleType.FILL_CENTER } }
     DisposableEffect(service,view) { service?.setPreviewSurface(view.surfaceProvider); onDispose { service?.setPreviewSurface(null) } }
-    Box(Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp)).background(Color.Black)) {
+    Box(Modifier.fillMaxWidth().height(320.dp).clip(RoundedCornerShape(20.dp)).background(Color.Black)) {
+        Box(Modifier.matchParentSize().graphicsLayer { scaleX=session.zoom.previewScale; scaleY=session.zoom.previewScale }) {
         AndroidView(factory={view},modifier=Modifier.fillMaxSize(),update={service?.setPreviewSurface(it.surfaceProvider)})
         Canvas(Modifier.fillMaxSize()) {
-            // CameraX supplies the real sensor crop, front-camera mirror, rotation and FIT_CENTER bars.
+            // Preview and points share the same extra display zoom, including unsupported camera zoom.
             val transform=view.sensorToViewTransform ?: return@Canvas
-            val landmarks=session.landmarks ?: return@Canvas
-            if(android.os.SystemClock.elapsedRealtime()-landmarks.atMs>500) return@Canvas
+            val frame=landmarks ?: return@Canvas
+            if(android.os.SystemClock.elapsedRealtime()-frame.atMs>500) return@Canvas
             val color=if(session.quality==Quality.GOOD) Mint else Amber
-            landmarks.faces.forEach { face ->
+            frame.faces.forEach { face ->
                 FaceOverlayGeometry.mapToPreview(face,transform).forEachIndexed { index,point ->
                     if(point.x.isFinite() && point.y.isFinite() && point.x in 0f..size.width && point.y in 0f..size.height) {
                         val radius=if(index in FaceDetailPoints) 2.dp.toPx() else 1.dp.toPx()
@@ -205,9 +219,33 @@ private fun CameraPreview(service:MonitoringService?,session:SessionUi) {
                 }
             }
         }
-        val count=session.landmarks?.faces?.sumOf { it.size } ?: 0
+        }
+        val count=landmarks?.faces?.sumOf { it.size } ?: 0
         Text(if(count>0) "$count POINTS · LOCAL" else "APERÇU LOCAL · EN ATTENTE DU VISAGE",
             Modifier.align(Alignment.BottomStart).padding(12.dp).background(Navy.copy(alpha=.8f)).padding(6.dp),color=Color.White,fontSize=10.sp)
+    }
+    Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+            Text("Zoom ${"%.2f".format(session.zoom.requested)}×",Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+            TextButton(enabled=controlsEnabled,onClick={service?.setZoom(1f);onZoomSaved(1f)}) { Text("1×") }
+            TextButton(enabled=controlsEnabled && landmarks!=null,onClick={
+                val transform=view.sensorToViewTransform
+                val face=landmarks?.faces?.singleOrNull()
+                if(transform!=null && face!=null && face.isNotEmpty()) {
+                    val points=FaceOverlayGeometry.mapToPreview(face,transform)
+                    val width=points.maxOf { it.x }-points.minOf { it.x }
+                    val height=points.maxOf { it.y }-points.minOf { it.y }
+                    if(width>1 && height>1) {
+                        val zoom=(session.zoom.actual*minOf(view.width*.80f/width,view.height*.85f/height)).coerceIn(1f,3f)
+                        service?.setZoom(zoom);onZoomSaved(zoom)
+                    }
+                }
+            }) { Text("Ajuster au visage") }
+        }
+        Slider(value=session.zoom.requested,onValueChange={service?.setZoom(it)},onValueChangeFinished={onZoomSaved(session.zoom.requested)},
+            valueRange=1f..3f,enabled=controlsEnabled)
+        Text(if(session.zoom.previewScale>1.02f) "Zoom d'aperçu complémentaire : il agrandit l'image sans ajouter de détails à l'analyse."
+            else "Centrez un seul visage. Gardez le front et le menton visibles.",fontSize=12.sp,color=Muted)
     }
 }
 @Composable
@@ -239,7 +277,7 @@ private fun SettingsPanel(settings:Settings,vm:WakeViewModel,service:MonitoringS
     Text(if(settings.calibrated) "Référence personnelle enregistrée localement." else "Référence générique utilisée. Une calibration peut améliorer l'adaptation à vos yeux.",color=Muted)
     Text("À l'arrêt, regardez naturellement devant vous, yeux ouverts pendant 3 à 5 secondes.",fontSize=14.sp)
     if(session.preparing) {
-        CameraPreview(service,session)
+        CameraPreview(service,session,vm::saveZoom)
         session.calibrationProgress?.let { LinearProgressIndicator(progress={it},modifier=Modifier.fillMaxWidth()) }
         Button(onClick={service?.calibrate()},enabled=session.calibrationProgress==null,modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) { Text("Calibrer mes yeux") }
     } else OutlinedButton(onClick=onPrepare,modifier=Modifier.fillMaxWidth()) { Text("Activer la caméra pour calibrer") }
@@ -274,7 +312,7 @@ private fun EyeMark(modifier:Modifier) {
         drawCircle(Amber,w*.105f)
     }
 }
-private fun qualityLabel(q:Quality)=when(q) {
+internal fun qualityLabel(q:Quality)=when(q) {
     Quality.GOOD->"Visage détecté"
     Quality.NO_FACE->"Positionnez votre visage face au téléphone"
     Quality.AMBIGUOUS_FACE->"Un seul visage doit rester dans le cadre"
