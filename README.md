@@ -2,9 +2,41 @@
 
 Projet d'application Android de détection de signes de somnolence, avec analyse du visage sur le téléphone et alertes sonores locales.
 
-**État au 10 octobre 2026 : phase 1 — conception rédigée, soumise à validation.**
+**Version 0.1.0 — prototype Android expérimental, développement autorisé le 10 octobre 2026.**
 
-Le cahier des charges demande une autorisation avant toute écriture du code de l'application. Ce dépôt contient donc la conception et le plan de développement. Il ne contient encore ni application exécutable, ni modèle intégré, ni APK, ni tests exécutés. Les performances et la compatibilité matérielle restent à mesurer.
+Le dépôt contient maintenant une application native Kotlin/Compose, le modèle MediaPipe embarqué, un moteur de règles indépendant d'Android, les tests et GitHub Actions. Les documents de conception ci-dessous restent le plan de référence historique. Le [bilan d'implémentation](docs/09_IMPLEMENTATION.md) décrit la version réelle et ses limites ; ne pas confondre une fonctionnalité codée avec une validation sur téléphone ou véhicule.
+
+## Fonctions du prototype
+
+- Caméra frontale avec aperçu optionnel, contrôle du cadrage, de la lumière et de la fraîcheur.
+- Fermeture prolongée des deux yeux, clignements, PERCLOS **estimé**, indices secondaires de bouche et de tête.
+- Avertissement précoce et alerte urgente, arrêt manuel immédiat demandé au lecteur, arrêt automatique après réouverture stable, reprise possible après acquittement.
+- Trois préférences audio, observation du routage pendant lecture, test sonore avant départ et vibration.
+- Service caméra et notifications avec commandes distinctes pour arrêter le son ou terminer la surveillance.
+- Calibration facultative, réglages locaux, interface française, aucun compte ni permission réseau.
+
+L'APK cible Android 8 ou ultérieur, sur architecture **arm64-v8a** ; x86_64 est inclus pour les tests sur émulateur. Une version Android compatible ne garantit pas la disponibilité de la caméra ou de l'audio en arrière-plan sur tous les constructeurs.
+
+## Compiler et vérifier
+
+Prérequis : JDK 17, Android SDK 36 et Build Tools 35.0.0. Définir `ANDROID_HOME` ou un `local.properties` local. Le modèle de 3,8 Mo est téléchargé une fois par le script de préparation, vérifié par hash puis inclus dans l'APK. Il n'est jamais téléchargé par l'application.
+
+```bash
+python3 scripts/fetch_model.py
+./gradlew :core:test :app:assembleDebug :app:lintDebug
+python3 scripts/verify_apk.py app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:connectedDebugAndroidTest
+```
+
+La dernière commande nécessite un appareil ou un émulateur. Elle vérifie le chargement natif du modèle sur une image synthétique, les permissions et le premier parcours ; elle ne mesure pas les performances sur un visage réel.
+
+L'APK se trouve dans `app/build/outputs/apk/debug/app-debug.apk`. Le workflow [Android](.github/workflows/android.yml) publie l'artefact `WakePilote-0.1.0-debug` et les rapports. Un APK debug est signé pour les essais ; les signatures locales et CI peuvent différer. Si Android refuse une mise à jour pour incompatibilité de signature, il faut désinstaller la précédente version de test, ce qui efface ses réglages. Aucune signature de production n'est créée ou conservée dans ce dépôt.
+
+## Premier essai
+
+À l'arrêt uniquement : accepter l'explication initiale, autoriser la caméra, vérifier le cadrage, jouer le test sonore, confirmer qu'il est entendu, puis démarrer. Tester le bouton d'arrêt sonore et la fin de surveillance. Une autorisation de notifications refusée impose le mode visible : quitter ou verrouiller l'application termine alors la session.
+
+Les essais GPS, Bluetooth véhicule, appels, verrouillage et chauffe sont à effectuer selon le [plan de validation](docs/06_VALIDATION.md), avant de les annoncer pris en charge sur un modèle de téléphone.
 
 ## Dossier de conception
 
@@ -35,6 +67,6 @@ WakePilote doit signaler des signes compatibles avec la somnolence et inviter à
 
 Les seuils proposés sont expérimentaux. Les essais se font à l'arrêt, sur simulateur ou sur données consenties ; aucune situation de somnolence ne doit être provoquée au volant.
 
-## Prochaine étape
+## Validation restante
 
-Après validation de cette conception : créer le projet Android, le moteur testable et le prototype caméra. Vérifier très tôt les deux risques bloquants : continuité de l'analyse avec une application GPS au premier plan et fiabilité observable du chemin audio. Voir les portes de validation dans le [backlog](docs/05_BACKLOG.md).
+La validation sur téléphone réel, la continuité avec une application GPS et l'audibilité dans un véhicule restent indispensables. Les seuils ne sont pas validés sur un corpus de conducteurs. Voir le [bilan](docs/09_IMPLEMENTATION.md) et les portes de validation dans le [backlog](docs/05_BACKLOG.md). Cette version ne doit pas servir à décider qu'une personne peut continuer à conduire.
