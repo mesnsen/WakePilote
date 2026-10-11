@@ -60,3 +60,67 @@ class LearningTest {
         assertThrows(IllegalArgumentException::class.java) { TrainingClip("unknown",123,TrainingLabel.UNKNOWN,TrainingDecision.CORRECTED,draft) }
     }
 }
+
+class TrainingWindowTest {
+    private val features=FaceFeatures(480,640,listOf(FeaturePoint(33,.2f,.3f,0f)),emptyMap())
+    private fun sample(at:Long,pitch:Double=0.0)=Observation(at,leftEar=.28,rightEar=.28,leftBlink=.1,rightBlink=.1,pitch=pitch)
+
+    @Test fun tapSnapshotsOnlyTheLastThreeSecondsAndBoundsMemory() {
+        val window=TrainingWindow(0)
+        for(t in 0L..10000 step 10) window.add(sample(t),20,1f,features)
+        assertEquals(61,window.count(10000))
+        val draft=window.snapshot(TrainingLabel.EYES_OPEN,Settings(),10000)!!
+        assertEquals(3000,draft.durationMs)
+        assertEquals(0,draft.frames.first().observation.atMs)
+        assertEquals(3000,draft.frames.last().observation.atMs)
+        window.clear(10000)
+        assertEquals(61,draft.frames.size) // Saved snapshot is independent of the live window.
+        assertNull(window.snapshot(TrainingLabel.EYES_OPEN,Settings(),10000))
+    }
+    @Test fun noFaceAndStaleMeasurementsCannotBeSaved() {
+        val window=TrainingWindow(0)
+        for(t in 0L..1000 step 100) window.add(sample(t),20,1f,null)
+        assertFalse(window.ready(1000))
+        window.add(sample(1100),20,1f,features)
+        assertTrue(window.ready(1100))
+        assertFalse(window.ready(1601))
+        assertNull(window.snapshot(TrainingLabel.EYES_OPEN,Settings(),1601))
+        assertEquals(0,window.count(5000))
+    }
+    @Test fun changingTargetOrLeavingDiscardsEarlierMeasures() {
+        val window=TrainingWindow(0)
+        for(t in 0L..1000 step 100) window.add(sample(t),20,1f,features)
+        window.clear(2000)
+        window.add(sample(1999),20,1f,features) // Delayed frame from the previous choice.
+        assertEquals(0,window.count(2000))
+        for(t in 2100L..2600 step 100) window.add(sample(t),20,1f,features)
+        val draft=window.snapshot(TrainingLabel.HEAD_NOD,Settings(),2600)!!
+        assertEquals(100,draft.frames.first().observation.atMs)
+        assertEquals(600,draft.durationMs)
+    }
+    @Test fun headMovementAndRejectedPoseRemainAvailableForManualLabels() {
+        val window=TrainingWindow(0)
+        for(t in 0L..1000 step 100) window.add(sample(t,if(t in 300..700) 25.0 else 0.0)
+            .copy(quality=if(t in 300..700) Quality.POSE else Quality.GOOD),20,1.5f,features)
+        val draft=window.snapshot(TrainingLabel.HEAD_NOD,Settings(),1000)!!
+        assertEquals(listOf(0.0,25.0,0.0),listOf(draft.frames.first(),draft.frames[5],draft.frames.last()).map { it.observation.pitch })
+        assertEquals(Quality.POSE,draft.frames[5].observation.quality)
+        assertEquals(features,draft.frames[5].features)
+    }
+    @Test fun aCounterExampleDoesNotInventAnotherGroundTruthClass() {
+        val window=TrainingWindow(0)
+        for(t in 0L..1000 step 100) window.add(sample(t),20,1f,features)
+        val draft=window.snapshot(TrainingLabel.HEAD_NOD,Settings(),1000)!!
+        val negative=TrainingClip("negative",123,null,null,draft,TrainingExample(TrainingLabel.HEAD_NOD,false))
+        assertNull(negative.actual)
+        assertNull(negative.decision)
+        assertEquals(TrainingLabel.HEAD_NOD,negative.target)
+        assertEquals(false,negative.example!!.matchesTarget)
+        assertThrows(IllegalArgumentException::class.java) {
+            TrainingClip("mixed",123,TrainingLabel.EYES_OPEN,TrainingDecision.CORRECTED,draft,TrainingExample(TrainingLabel.HEAD_NOD,false))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TrainingClip("different-target",123,null,null,draft,TrainingExample(TrainingLabel.YAWN,false))
+        }
+    }
+}

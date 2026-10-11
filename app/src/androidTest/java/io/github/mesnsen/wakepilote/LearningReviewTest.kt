@@ -3,6 +3,7 @@ package io.github.mesnsen.wakepilote
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -17,25 +18,33 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LearningReviewTest {
     @get:Rule val compose=createComposeRule()
-    private fun draft(predicted:TrainingLabel)=TrainingDraft(TrainingLabel.EYES_CLOSED,predicted,Settings(),3000,
-        listOf(TrainingFrame(Observation(100),20,1f,null,EyeState.UNKNOWN,EyeState.UNKNOWN)))
-    @Test fun notOkLetsTheUserCorrectTheLabelBeforeSaving() {
-        var selected:Pair<TrainingLabel,Boolean>?=null
+    private fun content(enabled:Boolean=true,onLabel:(TrainingLabel,Boolean)->Unit) {
         compose.setContent { WakeTheme { Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-            LearningReview(draft(TrainingLabel.EYES_OPEN),false,{ label,corrected->selected=label to corrected },{})
+            var target by remember { mutableStateOf(TrainingLabel.EYES_OPEN) }
+            TrainingTargetDropdown(target,true) { target=it }
+            LearningLabelButtons(target,enabled) { onLabel(target,it) }
         } } }
-        compose.onNodeWithText("Pas OK · corriger").performScrollTo().performClick()
-        compose.onNodeWithText("Bâillement").performScrollTo().performClick()
-        compose.onNodeWithText("Garder la correction").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(TrainingLabel.YAWN to true,selected) }
     }
-    @Test fun unknownCannotBeConfirmedButCanBeLabeledOrDiscarded() {
-        var discarded=false
-        compose.setContent { WakeTheme { Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-            LearningReview(draft(TrainingLabel.UNKNOWN),false,{_,_->fail("Unknown must not be confirmed")},{discarded=true})
-        } } }
-        compose.onNodeWithText("OK · garder").assertIsNotEnabled()
-        compose.onNodeWithText("Jeter cet essai").performScrollTo().performClick()
-        compose.runOnIdle { assertTrue(discarded) }
+    @Test fun dropdownSelectsHeadMovementAndPositiveTapSavesDirectly() {
+        var saved:Pair<TrainingLabel,Boolean>?=null
+        content { target,matches->saved=target to matches }
+        compose.onNodeWithTag("training-target").performClick()
+        compose.onNodeWithText("Basculement de la tête vers le bas").performClick()
+        compose.onNodeWithText("Exemple correct").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(TrainingLabel.HEAD_NOD to true,saved) }
+        compose.onNodeWithText("Garder la correction").assertDoesNotExist()
+    }
+    @Test fun counterExampleIsImmediatelyAssociatedWithSelectedDetection() {
+        var saved:Pair<TrainingLabel,Boolean>?=null
+        content { target,matches->saved=target to matches }
+        compose.onNodeWithTag("training-target").performClick()
+        compose.onNodeWithText("Bâillement").performClick()
+        compose.onNodeWithText("Contre-exemple").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(TrainingLabel.YAWN to false,saved) }
+    }
+    @Test fun bothLabelsAreDisabledUntilRecentFaceMeasuresAreAvailable() {
+        content(enabled=false) { _,_->fail("No measures must not be saved") }
+        compose.onNodeWithText("Exemple correct").assertIsNotEnabled()
+        compose.onNodeWithText("Contre-exemple").assertIsNotEnabled()
     }
 }

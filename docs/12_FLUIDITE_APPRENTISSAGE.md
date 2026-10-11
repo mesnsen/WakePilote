@@ -1,5 +1,7 @@
 # Version 0.1.2 — fluidité, zoom et exemples corrigés
 
+Document historique : le parcours de capture/correction ci-dessous est remplacé en **0.1.3** par l’[apprentissage direct avec liste déroulante et deux boutons](13_APPRENTISSAGE_DIRECT.md). Les améliorations caméra et zoom restent actives.
+
 ## Cadrer et observer
 
 L'aperçu est plus haut et remplit son cadre. Le curseur va de 1× à 3×, avec un bouton 1× et un bouton « Ajuster au visage ». Ce dernier effectue un ajustement ponctuel : centrer d'abord le visage, puis garder le front et le menton visibles. Le zoom demandé est mémorisé sur le téléphone.

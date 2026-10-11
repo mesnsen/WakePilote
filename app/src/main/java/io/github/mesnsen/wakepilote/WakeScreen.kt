@@ -60,7 +60,6 @@ fun WakeScreen(vm:WakeViewModel,service:MonitoringService?,onPrepare:()->Unit,on
         service?.setLearningEnabled(learning)
         onDispose { service?.setLearningEnabled(false) }
     }
-    DisposableEffect(learning) { onDispose { vm.cancelCapture() } }
     WakeTheme {
         Surface(modifier=Modifier.fillMaxSize(),color=Navy) {
             if(!loaded) Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) { CircularProgressIndicator() }

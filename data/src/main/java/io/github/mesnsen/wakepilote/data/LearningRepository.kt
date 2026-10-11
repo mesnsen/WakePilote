@@ -48,7 +48,8 @@ class LearningRepository(file:File) {
         if(!file.baseFile.exists() && !File(file.baseFile.path+".bak").exists()) return emptyList()
         val text=file.openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }
         val root=JSONObject(text)
-        require(root.getInt("schemaVersion")==TrainingCapture.SCHEMA_VERSION) { "Version de fichier d'apprentissage inconnue" }
+        // Keep the original file path and read v1 without reinterpreting its correction labels.
+        require(root.getInt("schemaVersion") in 1..TrainingCapture.SCHEMA_VERSION) { "Version de fichier d'apprentissage inconnue" }
         val clips=root.getJSONArray("clips")
         require(clips.length()<=TrainingCapture.MAX_CLIPS)
         return List(clips.length()) { decodeClip(clips.getJSONObject(it)) }
@@ -62,13 +63,17 @@ class LearningRepository(file:File) {
             .put("schemaVersion",TrainingCapture.SCHEMA_VERSION).put("algorithmVersion",TrainingCapture.ALGORITHM_VERSION)
             .put("modelSha256","64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff")
             .put("coordinateSystem","Points MediaPipe normalisés x/y/z dans l'image d'analyse redressée, non miroir. Indices explicites. atMs relatif au début de chaque séquence.")
+            .put("annotationDescription","TARGET_EXAMPLE : annotation manuelle de la fenêtre précédant l'appui. matchesTarget=false exclut seulement la cible choisie, sans attribuer une autre classe. LEGACY_REVIEW conserve les annotations 0.1.2. predicted est un résumé indicatif des yeux/bouche, jamais la vérité terrain ni une décision d'alerte.")
             .put("rules",JSONObject().put("closedEarRatio",.5).put("openEarRatio",.7).put("closedBlinkMin",.6)
                 .put("openBlinkMax",.35).put("mouthRatioMin",.6).put("jawOpenMin",.6).put("yawnDurationMs",1500).put("maxEvidenceGapMs",250))
             .put("clips",array(clips.map(::encodeClip)))
 
         fun encodeClip(c:TrainingClip):JSONObject=JSONObject().put("id",c.id).put("createdAtEpochMs",c.createdAtEpochMs)
-            .put("expected",c.draft.expected.name).put("predicted",c.draft.predicted.name).put("actual",c.actual.name)
-            .put("decision",c.decision.name).put("durationMs",c.draft.durationMs)
+            .put("expected",c.draft.expected.name).put("predicted",c.draft.predicted.name).put("actual",c.actual?.name ?: JSONObject.NULL)
+            .put("decision",c.decision?.name ?: JSONObject.NULL).put("durationMs",c.draft.durationMs)
+            .put("annotationMode",if(c.example!=null) "TARGET_EXAMPLE" else "LEGACY_REVIEW")
+            .put("example",c.example?.let { JSONObject().put("target",it.target.name).put("matchesTarget",it.matchesTarget)
+                .put("scope","WINDOW_BEFORE_TAP") } ?: JSONObject.NULL)
             .put("goodFrames",c.draft.goodFrames).put("largestGapMs",c.draft.largestGapMs)
             .put("settings",JSONObject().put("leftReference",c.draft.settings.leftReference)
                 .put("rightReference",c.draft.settings.rightReference).put("calibrated",c.draft.settings.calibrated)
@@ -114,8 +119,16 @@ class LearningRepository(file:File) {
             }
             val draft=TrainingDraft(TrainingLabel.valueOf(j.getString("expected")),TrainingLabel.valueOf(j.getString("predicted")),
                 settings,j.getLong("durationMs"),frames)
-            return TrainingClip(j.getString("id"),j.getLong("createdAtEpochMs"),TrainingLabel.valueOf(j.getString("actual")),
-                TrainingDecision.valueOf(j.getString("decision")),draft)
+            val example=if(j.optString("annotationMode","LEGACY_REVIEW")=="TARGET_EXAMPLE") {
+                val e=j.getJSONObject("example")
+                TrainingExample(TrainingLabel.valueOf(e.getString("target")),e.getBoolean("matchesTarget"))
+            } else {
+                require(j.optString("annotationMode","LEGACY_REVIEW")=="LEGACY_REVIEW") { "Annotation inconnue" }
+                null
+            }
+            return TrainingClip(j.getString("id"),j.getLong("createdAtEpochMs"),
+                if(j.isNull("actual")) null else TrainingLabel.valueOf(j.getString("actual")),
+                if(j.isNull("decision")) null else TrainingDecision.valueOf(j.getString("decision")),draft,example)
         }
     }
 }
