@@ -1,54 +1,55 @@
-# Résultats de validation du prototype 0.1.2
+# Résultats de validation du prototype 0.1.3
 
-Validation exécutée le 10 octobre 2026 pour le code du commit `bbc747922a2736a5109d59599b055d007eea0288`.
+Validation exécutée le 11 octobre 2026 pour le code du commit `90a2eea8ff049be357aa73f9102900d60715295a`.
 
-La [CI Android nº 4](https://github.com/mesnsen/WakePilote/actions/runs/38083154667) a terminé avec succès ses deux jobs, `build` et `instrumented`. Les compléments documentaires ultérieurs ne modifient pas ce code. La version 0.1.2 ajoute le [suivi d'un visage avec zoom et l'apprentissage par exemples](12_FLUIDITE_APPRENTISSAGE.md), en conservant les [correctifs 0.1.1](11_CORRECTIFS_0.1.1.md).
+La [CI Android nº 5](https://github.com/mesnsen/WakePilote/actions/runs/38132909075) a terminé avec succès ses deux jobs, `build` et `instrumented`. Les compléments documentaires ultérieurs ne modifient pas ce code. La version 0.1.3 remplace le parcours de capture/correction par l'[apprentissage direct](13_APPRENTISSAGE_DIRECT.md) : sélection dans une liste, exemple correct ou contre-exemple, aperçu avec les points, sauvegarde immédiate des mesures précédentes et export JSON sans vidéo.
 
 | Vérification | Résultat |
 | --- | --- |
-| Moteur Kotlin | 30 tests, zéro échec et zéro erreur : 24 tests de surveillance et 6 tests de recueil/classification des exemples ; tâche `:core:test` réussie en CI |
-| Compilation Android | APK de l'application et APK de tests construits avec JDK 17 / Gradle 8.11.1 / SDK 36 |
+| Moteur Kotlin | 35 tests, zéro échec : 24 de surveillance, 6 de classification/compatibilité, 5 de fenêtre temporelle et annotations par cible ; `:core:test` réussi en CI et vérification JVM locale réussie |
+| Compilation Android | APK application et APK de tests construits avec JDK 17 / Gradle 8.11.1 / SDK 36 |
 | Lint | Réussi pour `app`, `audio`, `vision` et `data` ; zéro erreur |
-| Tests instrumentés | 16 tests réussis sur Android 15 Google APIs ; Wi-Fi et données mobiles désactivés avant les tests |
-| Régression de l'analyse | Mesures sur résultat facial synthétique avant libération du bitmap ; libération aussi en cas d'erreur ; effacement après perte du visage |
-| Alignement des points | Rotations 0°, 90°, 180° et 270°, cadrage, décalage de l'aperçu et miroir frontal vérifiés |
-| Régression audio | Lecture statique, arrêt, alerte urgente et redémarrage réussis ; l'émulateur ne valide pas l'audibilité réelle |
-| Apprentissage | Compte à rebours, capture, correction du label, sauvegarde et export JSON via le résolveur Android réussis ; sortie de capture correctement annulée |
-| Persistance / export | Données relues après réouverture, valeurs absentes exportées en `null`, fichier corrompu préservé et signalé, suppression et remise à zéro vérifiées |
-| Interface de correction | Parcours « Pas OK », choix du mouvement réel, confirmation interdite pour une prédiction indéterminée et abandon vérifiés |
-| Modèle embarqué | SHA-256 vérifié, puis chargement natif en mode VIDEO, un visage maximum, et traitement de trois images grises successives réussis |
-| Confidentialité du paquet | Permissions Internet, état réseau, microphone et localisation absentes ; classes d'envoi de télémétrie et DataTransport absentes |
-| Journalisation MediaPipe | La fabrique retourne effectivement `TasksStatsDummyLogger` dans le test Android |
-| Architecture native | ARM64 uniquement, cinq bibliothèques natives présentes ; aucune architecture partiellement empaquetée |
-| Alignement 16 Ko | Segments ELF contrôlés par script et alignement ZIP vérifié avec `zipalign -c -P 16 4` |
-| Signature de l'APK livré | Signature debug v2 vérifiée avec `apksigner` ; aucune clé de production |
-| Wrapper Gradle | Hash identique au hash officiel de Gradle 8.11.1 |
-| Essais sur téléphone / véhicule | Non exécutés |
+| Tests instrumentés | 19 tests réussis sur Android 15 Google APIs ; Wi-Fi et données mobiles désactivés avant les tests |
+| Apprentissage direct | Deux appuis associés à la cible ; aucune seconde validation ; double appui protégé ; export Android vérifié |
+| Mémoire temporaire | Fenêtre limitée à 3 secondes/61 mesures ; mesures périmées refusées ; vidage après appui, changement de cible, sortie ou arrêt caméra |
+| Mouvements de tête | Historique d'inclinaison préservé, y compris les mesures rejetées pour pose ; annotation `HEAD_NOD` positive/négative conservée |
+| Contre-exemples | Une annotation négative exclut uniquement sa cible ; aucune autre classe réelle n'est inventée |
+| Persistance et migration | Réouverture et export v2 réussis ; migration v1 conserve les anciennes corrections ; fichier corrompu préservé et signalé ; suppressions vérifiées |
+| Interface | Liste déroulante, choix tête/bâillement, deux boutons directs et désactivation sans mesures récentes vérifiés |
+| Régressions caméra | Durée de vie du bitmap, libération sur erreur, mesures brutes et effacement après perte du visage vérifiés |
+| Points du visage | Rotations 0°, 90°, 180°, 270°, cadrage, décalage de l'aperçu et miroir frontal vérifiés |
+| Audio | Lecture statique, arrêt, alerte urgente et redémarrage réussis ; l'émulateur ne valide pas l'audibilité réelle |
+| Modèle embarqué | Hash vérifié ; chargement natif VIDEO avec un visage maximum et trois images grises traitées |
+| Confidentialité | Permissions Internet, état réseau, microphone et localisation absentes ; télémétrie/DataTransport absents ; `TasksStatsDummyLogger` vérifié sur Android |
+| Architecture et alignement | ARM64 uniquement, cinq bibliothèques ; ELF 16 Ko et ZIP avec `zipalign -c -P 16 4` vérifiés en CI |
+| Signature livrée | Signature v2 vérifiée après téléchargement avec `ApkVerifier` ; signature debug |
+| Téléphone réel / véhicule | Non exécuté |
 
 ## APK de test livré
 
-- Fichier : `WakePilote-0.1.2-debug.apk`, version Android `0.1.2`, code `3`.
-- Taille : 32 905 038 octets.
-- SHA-256 : `cb27593b8ca6f1f7f28dd7f3ab06c2e14671e579cdce10a2c3f2c16ef7a127c8`.
-- Provenance : [artefact de la CI](https://github.com/mesnsen/WakePilote/actions/runs/38083154667/artifacts/11680828800), conservé jusqu'au 9 novembre 2026 par ce workflow. Empreinte de l'archive et empreinte de l'APK contrôlées après téléchargement.
-- Minimum : Android 8, processeur ARM64 et caméra frontale. Installer et essayer uniquement à l'arrêt.
-- Les clés de test des exécutions peuvent différer. Si Android refuse la mise à jour, désinstaller l'ancienne version puis installer 0.1.2 ; cette opération efface les réglages et les exemples internes. Exporter les exemples avant toute désinstallation.
+- Fichier : `WakePilote-0.1.3-debug.apk`, version `0.1.3`, code `4`.
+- Taille : 32 905 042 octets.
+- SHA-256 : `e1aa304155cea2734dc3c9c8014d2bbf1a2d646ea1b6d79a1e87185705cd3fb9`.
+- Provenance : [artefact de la CI](https://github.com/mesnsen/WakePilote/actions/runs/38132909075/artifacts/11699563640), conservé jusqu'au 10 novembre 2026 par le workflow.
+- SHA-256 de l'archive : `2edca2d47e9b3ae5e015fc7ea67ca3e7b31a66ab8a0c612ca660b820cc8af223`. Archive et APK contrôlés après téléchargement ; l'APK correspond au fichier validé en CI.
+- Minimum : Android 8, processeur ARM64, caméra frontale. Essais à l'arrêt.
+- Les clés debug peuvent différer entre exécutions. Si Android refuse la mise à jour, exporter les exemples avant toute désinstallation : désinstaller efface les réglages et exemples internes.
 
-## Ce que les tests couvrent
+## Portée des tests
 
-Les tests du moteur couvrent les durées de fermeture, les clignements courts, la fermeture d'un seul œil, les horodatages irréguliers, les images périmées ou figées, la perte du visage, le PERCLOS pondéré par le temps et sa couverture minimale, le score combiné, l'arrêt manuel, le réarmement, la réouverture stable, les sessions précédentes et la calibration.
+Les 19 tests Android comprennent quatre contrôles d'accueil/confidentialité/modèle, cinq régressions caméra, un cycle audio, cinq tests de stockage, trois tests d'interface et un parcours complet de sauvegarde/export. Les observations faciales sont synthétiques ; le bitmap Android, `MPImage`, le chargement natif, le stockage, Compose et le résolveur de fichiers sont exercés réellement. Les tests ne mesurent pas la qualité de détection d'un visage réel. Aucune image ni donnée d'apprentissage de l'utilisateur n'est ajoutée au dépôt.
 
-Les seize tests Android comprennent les quatre contrôles d'accueil/confidentialité/modèle, cinq régressions de la chaîne caméra, un cycle audio, trois tests de stockage, deux tests d'interface et un parcours de capture/export. Les résultats faciaux et les observations injectés sont synthétiques : le chemin de lecture des pixels utilise un vrai bitmap Android et un vrai `MPImage`, mais ces tests ne mesurent pas la qualité de détection d'un visage réel. La capture fournie lors du signalement n'est pas stockée dans le dépôt.
+L'émulateur x86_64 utilise la traduction ARM64. Les mesures de performance ne sont donc pas celles d'un téléphone ARM réel. La compilation Android, le lint et les contrôles SDK ont été exécutés en CI ; les tests JVM et la signature de l'APK téléchargé ont également été vérifiés localement.
 
-L'émulateur x86_64 annonce la prise en charge ARM64 par traduction ; ce résultat ne mesure pas les performances d'un téléphone ARM réel. La compilation locale propre, le lint des quatre modules, les tests du moteur et les contrôles du paquet ont également réussi. L'APK livré provient de la CI, et sa signature v2 a été vérifiée après téléchargement.
+Les seuils de surveillance restent inchangés. Le nouveau mode collecte des annotations sur des fenêtres temporelles ; il ne réentraîne pas automatiquement le modèle. Les mouvements transitoires ne deviennent pas des labels individuels de chaque mesure. L'analyse ultérieure doit distinguer transitions et positions stables et réserver des exemples indépendants à la validation.
 
-## Limites et avertissements résiduels
+Restent à essayer sur matériel : confort des boutons avec les yeux fermés, fluidité, précision des points, netteté/zoom, seuils, GPS/verrouillage, audibilité réelle, Bluetooth, interruptions audio, consommation et chauffe. Voir le [plan de validation](06_VALIDATION.md). Aucun taux de sécurité ou de détection réelle n'est annoncé. Les dépendances restent épinglées ; leurs suggestions de mise à jour et les avertissements ABI ChromeOS ne sont pas une qualification pour ces appareils.
 
-Le lint signale encore des versions plus récentes de dépendances, une suggestion de style Kotlin et la couverture ABI de ChromeOS. Les versions restent figées pour cette livraison et l'application cible les téléphones ARM64. Les actions CI épinglées fonctionnent, mais leur migration vers les versions actuelles reste une tâche de maintenance.
+## Historique 0.1.2
 
-Un précédent échec d'édition de liens de ressources locales après changement de la transformation Gradle a été résolu par une reconstruction propre. En cas de modification de cette transformation, commencer par `./gradlew clean` ; le build CI part également d'un checkout propre.
+La [CI Android nº 4](https://github.com/mesnsen/WakePilote/actions/runs/38083154667) validait le commit `bbc747922a2736a5109d59599b055d007eea0288` avec 30 tests JVM et 16 tests Android. Elle ajoutait le suivi lissé, le zoom et le parcours de capture/correction désormais remplacé.
 
-Restent à exécuter sur matériel : image d'un visage consenti, précision des seuils, latence, caméra pendant GPS et verrouillage, arrêt sonore réel, autoradio Bluetooth, appels, déconnexion, volume nul, mode Ne pas déranger, consommation et chauffe prolongée. Les scénarios figurent dans [06_VALIDATION.md](06_VALIDATION.md). Aucun taux de sécurité, de détection réelle ou de continuité en conduite n'est annoncé.
+Ancien APK : `WakePilote-0.1.2-debug.apk`, 32 905 038 octets, SHA-256 `cb27593b8ca6f1f7f28dd7f3ab06c2e14671e579cdce10a2c3f2c16ef7a127c8`.
 
 ## Historique 0.1.1
 
